@@ -54,6 +54,7 @@
   .lbl::before { content:''; position:absolute; left:-12px; top:50%; width:12px; border-top:1px solid var(--acc); }
   #credit { position:fixed; left:50%; transform:translateX(-50%); top:10px; font-size:11px; color:#6d788b; pointer-events:none; text-align:center; }
   #credit a { color:#8fa3c2; pointer-events:auto; }
+  .credits { margin-top:12px; padding-top:8px; border-top:1px solid var(--line); font-size:10.5px; color:#5d687a; } .credits a { color:#7f8da3; }
   #load { position:fixed; inset:0; display:grid; place-items:center; color:var(--dim); font-size:12px; letter-spacing:.2em; }
 
   .tourbtn { width:100%; margin:6px 0 2px; padding:9px 10px; font-weight:600; border-color:#3a5a86; background:linear-gradient(180deg,#1b2b44,#14203a); }
@@ -87,7 +88,6 @@
 <div id="load">LOADING RAPTOR 3…</div>
 <canvas id="c"></canvas>
 <div id="labels"></div>
-<div id="credit">3D model: <a href="https://sketchfab.com/3d-models/none-2d3918a9edcb4eedbf2d180391113e3a" target="_blank" rel="noopener">"SpaceX Starship Raptor 3 engine"</a> by VoitAa on Sketchfab (an Epic Games company) · CC BY 4.0 · materials, simulation &amp; scene: original</div>
 
 <div id="ctrl" class="ui">
   <h1>RAPTOR 3</h1>
@@ -120,6 +120,7 @@
 
   <div class="sec">Components</div>
   <ul id="parts"></ul>
+  <div class="credits">3D model: <a href="https://sketchfab.com/3d-models/none-2d3918a9edcb4eedbf2d180391113e3a" target="_blank" rel="noopener">Raptor 3</a> by VoitAa (Sketchfab) · CC BY 4.0</div>
 </div>
 
 <div id="info" class="ui"></div>
