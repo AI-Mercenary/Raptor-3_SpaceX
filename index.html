@@ -310,7 +310,7 @@ const hazePass = new ShaderPass({
       vec4 c=texture2D(tDiffuse, vUv+o);
       float v=smoothstep(1.25,.35,length((vUv-.5)*vec2(uAspect,1.)));
       c.rgb*=mix(.55,1.,v);
-      c.rgb+= (h(vUv*vec2(1731.,977.)+fract(uTime))-.5)*.025;
+      
       gl_FragColor=c; }`
 });
 if (Q.haze) composer.addPass(hazePass);
@@ -804,7 +804,7 @@ const plumeMat = new THREE.ShaderMaterial({
       float ty0=(0.-ro.y)/rd.y, ty1=(-uLen-ro.y)/rd.y; float tEnd=min(a>1e-6?tc2:1e9, max(ty0,ty1));
       if (tEnd<=t0) discard;
       const int STEPS=${Q.steps}; float dt=(tEnd-t0)/float(STEPS);
-      float jit=h3(vec3(gl_FragCoord.xy, fract(uTime)*91.))*dt;
+      float jit=h3(vec3(gl_FragCoord.xy, 7.))*dt;
       vec3 col=vec3(0.); float vac=1.-uAir;
       for(int i=0;i<STEPS;i++){
         vec3 p=ro+rd*(t0+float(i)*dt+jit); float d=-p.y; if(d<0.||d>uLen) continue;
@@ -830,7 +830,7 @@ const plumeMat = new THREE.ShaderMaterial({
         e += vec3(.45,.65,1.)*uTorch*prof*exp(-d/uR0)*2.5;
         col += e*dt*1.35;
       }
-      col *= uPower*(.88+.12*n3(vec3(uTime*37.,1.7,.3)));
+      col *= uPower;
       col = 1.-exp(-col*1.15);
       gl_FragColor = vec4(col, 1.);
     }
@@ -1024,7 +1024,7 @@ $('ignite').onclick=e=>{
 //  LOOP
 // =====================================================================
 const clock=new THREE.Clock();
-let simTick=1, cfdRunning=false, paramTick=1, shadowSig='', frameAcc=0, frameN=0, curDpr=Q.dpr;
+let simTick=1, cfdRunning=false, paramTick=1, shadowSig='', frameAcc=0, frameN=0, curDpr=Q.dpr, slowSecs=0, fastSecs=0;
 const _p=V3();
 function animate(){
   if (!innerWidth || !innerHeight) { clock.getDelta(); requestAnimationFrame(animate); return; }   // hidden / zero-size viewport
@@ -1043,10 +1043,10 @@ function animate(){
   if (ignT>=0){
     ignT+=dt; const step=[...SEQ].reverse().find(s=>ignT>=s[0]); $('seq').textContent=step[1];
     if (ignT>1.0) pb = Math.min(1, pb+dt*1.2);
-    torch = (ignT>1.0&&ignT<1.4)||(ignT>1.8&&ignT<2.3) ? 1 : Math.max(0, torch-dt*4);
+    const torchT = (ignT>0.9&&ignT<2.4) ? 1 : 0; torch += (torchT-torch)*Math.min(1,dt*3);
     if (ignT>1.8) firing=true;
     if (ignT>3.6) ignT=-2;
-  } else torch = Math.max(0, torch-dt*4);
+  } else torch += (0-torch)*Math.min(1,dt*3);
   if (shutdown) pb = Math.max(0, pb-dt*1.5);
   power += ((firing?throttle:0)-power)*Math.min(1, dt*(firing?1.8:3.2));
   $('pc').textContent=Math.round(P0*power)+' bar';
@@ -1070,8 +1070,8 @@ function animate(){
   const pu=plumeMat.uniforms, air=Math.min(1,nozzle.Pa/1.01325);
   pu.uTime.value=t%600; pu.uPower.value=Math.max(power, torch*0.25)*(cfdRunning?0.35:1); pu.uRatio.value=nozzle.ratio; pu.uLam.value=R_EXIT*2.1; pu.uAir.value=air; pu.uTorch.value=torch*(1-power);   // visual cell spacing matched to test-stand footage (CFD computes its own)
   plumeMeshes.forEach(m=>m.visible = pu.uPower.value>0.01 && ex<0.02);
-  fireLight.intensity = power*28*(0.9+0.08*Math.sin(t*47)+0.05*Math.sin(t*131));
-  torchLight.intensity = torch*25;
+  fireLight.intensity = power*28;
+  torchLight.intensity = torch*12;
   MAT.body.userData.u.uHeat.value = power*0.5*(1-0.3*air);
   bloom.strength = 0.2 + power*0.45;
   hazePass.uniforms.uTime.value = t%600;
@@ -1097,12 +1097,17 @@ function animate(){
   if ($('labelsOn').checked) labelRenderer.render(scene, camera);
   // dynamic resolution: hold ~55+ fps by scaling the render resolution
   frameAcc += dt; frameN++;
+  if (ignT>=0 || shutdown && power>0.02){ frameAcc=0; frameN=0; slowSecs=0; }
   if (frameAcc > 1.0){ const avg = frameAcc/frameN; frameAcc=0; frameN=0;
     let nd = curDpr;
-    if (avg > 1/48) nd = Math.max(0.6, curDpr*0.85); else if (avg < 1/58 && curDpr < Q.dprMax) nd = Math.min(Q.dprMax, curDpr*1.08);
+    slowSecs = avg > 1/45 ? slowSecs+1 : 0; fastSecs = avg < 1/58 ? fastSecs+1 : 0;
+    if (slowSecs>=2){ nd = Math.max(0.6, curDpr*0.88); slowSecs=0; } else if (fastSecs>=4 && curDpr < Q.dprMax){ nd = Math.min(Q.dprMax, curDpr*1.06); fastSecs=0; }
     if (Math.abs(nd-curDpr) > 0.02){ curDpr = nd; renderer.setPixelRatio(curDpr); composer.setPixelRatio(curDpr); renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); } }
   requestAnimationFrame(animate);
 }
+flowGroup.visible = true; plumeMeshes.forEach(m=>m.visible=true);
+renderer.compile(scene, camera);
+flowGroup.visible = false; plumeMeshes.forEach(m=>m.visible=false);
 $('load').remove();
 animate();
 addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); labelRenderer.setSize(innerWidth,innerHeight); });
