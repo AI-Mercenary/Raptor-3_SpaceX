@@ -55,6 +55,9 @@
   #credit { position:fixed; left:50%; transform:translateX(-50%); top:10px; font-size:11px; color:#6d788b; pointer-events:none; text-align:center; }
   #credit a { color:#8fa3c2; pointer-events:auto; }
   .credits { margin-top:12px; padding-top:8px; border-top:1px solid var(--line); font-size:10.5px; color:#5d687a; } .credits a { color:#7f8da3; }
+  .hd { display:flex; align-items:center; justify-content:space-between; } #ctrlToggle { display:none; padding:4px 10px; }
+  @media (max-width:720px){ #ctrlToggle { display:block; } #ctrl.collapsed { max-height:none; overflow:hidden; } #ctrl.collapsed > :not(.hd):not(.sub):not(.tourbtn) { display:none; } #ctrl { top:10px; left:10px; width:calc(100% - 20px); max-height:55%; } #ctrl.collapsed .sub { margin-bottom:4px; } }
+  body.mobile .ui { backdrop-filter:none; background:rgba(10,13,19,.95); }
   #load { position:fixed; inset:0; display:grid; place-items:center; color:var(--dim); font-size:12px; letter-spacing:.2em; }
 
   .tourbtn { width:100%; margin:6px 0 2px; padding:9px 10px; font-weight:600; border-color:#3a5a86; background:linear-gradient(180deg,#1b2b44,#14203a); }
@@ -90,7 +93,7 @@
 <div id="labels"></div>
 
 <div id="ctrl" class="ui">
-  <h1>RAPTOR 3</h1>
+  <div class="hd"><h1>RAPTOR 3</h1><button id="ctrlToggle" aria-label="Show or hide controls">Controls ▾</button></div>
   <div class="sub">Full-flow staged combustion · LOX / CH₄ · Starship &amp; Super Heavy</div>
   <button id="tourBtn" class="tourbtn">▶ Guided tour — how Raptor works</button>
 
@@ -248,17 +251,28 @@ function wallR(y){
 }
 
 // =====================================================================
+//  QUALITY TIERS — phones/tablets get a lighter pipeline; every device
+//  gets dynamic resolution to hold a smooth frame rate
+// =====================================================================
+const MOBILE = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+const Q = MOBILE
+  ? { dprMax:1.5, dpr:Math.min(devicePixelRatio,1.15), aa:false, shadows:false, haze:false, steps:34, physical:false, cfdDx:0.045 }
+  : { dprMax:Math.min(devicePixelRatio,2), dpr:Math.min(devicePixelRatio,1.6), aa:true, shadows:true, haze:true, steps:60, physical:true, cfdDx:0.03 };
+if (MOBILE) document.body.classList.add('mobile');
+
+// =====================================================================
 //  RENDERER / SCENE / POST
 // =====================================================================
 const canvas = $('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:Q.aa, powerPreference:'high-performance' });
+renderer.setPixelRatio(Q.dpr);
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.localClippingEnabled = true;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = Q.shadows;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;   // re-rendered only when the engine moves
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x030407);
@@ -267,14 +281,14 @@ scene.fog = new THREE.FogExp2(0x05070b, 0.028);
 
 const camera = new THREE.PerspectiveCamera(32, innerWidth/innerHeight, 0.05, 400);
 const HOME = V3(9.5, 0.2, 12.5), HOME_T = V3(0, -1.6, 0);
-camera.position.copy(HOME);
+camera.position.copy(homePos());
 const controls = new OrbitControls(camera, canvas);
 controls.target.copy(HOME_T); controls.enableDamping = true; controls.minDistance = 1.2; controls.maxDistance = 90;
 
 // Cinematic test-cell lighting: cool key, warm kicker, cold rim, soft fill from below
 scene.add(new THREE.HemisphereLight(0x9fb8d8, 0x120c08, 0.35));
 const key = new THREE.SpotLight(0xdfe9ff, 120, 40, 0.42, 0.6, 1.6);
-key.position.set(6, 9, 7); key.target.position.set(0,0,0); key.castShadow = true; key.shadow.mapSize.set(2048,2048); key.shadow.bias = -0.0003;
+key.position.set(6, 9, 7); key.target.position.set(0,0,0); key.castShadow = true; key.shadow.mapSize.set(1536,1536); key.shadow.bias = -0.0003;
 scene.add(key, key.target);
 const kicker = new THREE.SpotLight(0xffb070, 60, 30, 0.5, 0.8, 1.6); kicker.position.set(-7, 2, 3); scene.add(kicker, kicker.target);
 const rim = new THREE.DirectionalLight(0x6f9fff, 1.6); rim.position.set(-4, 5, -8); scene.add(rim);
@@ -299,7 +313,7 @@ const hazePass = new ShaderPass({
       c.rgb+= (h(vUv*vec2(1731.,977.)+fract(uTime))-.5)*.025;
       gl_FragColor=c; }`
 });
-composer.addPass(hazePass);
+if (Q.haze) composer.addPass(hazePass);
 composer.addPass(new OutputPass());
 
 const labelRenderer = new CSS2DRenderer({ element: $('labels') });
@@ -341,16 +355,40 @@ const rust = new THREE.MeshStandardMaterial({ color:0x3a2c24, roughness:.85, met
 // =====================================================================
 const clipPlane = new THREE.Plane(V3(0,0,-1), 0);
 const hwMats = [];
-const NOISE_GLSL = `
+// 64³ tileable texture: R = value noise, G = 4-octave fBm (period 16 lattice cells).
+// One texture fetch replaces up to 32 hash+mix evaluations per noise call.
+const noiseTex = (()=>{
+  const N=64, L=16, lat=new Float32Array(L*L*L); for (let i=0;i<lat.length;i++) lat[i]=Math.random();
+  const g=(i,j,k)=>lat[(i&15)+((j&15)<<4)+((k&15)<<8)];
+  const sm=t=>t*t*(3-2*t);
+  const val=(x,y,z)=>{ const xi=Math.floor(x), yi=Math.floor(y), zi=Math.floor(z), fx=sm(x-xi), fy=sm(y-yi), fz=sm(z-zi);
+    const l=(a,b,t)=>a+(b-a)*t;
+    return l(l(l(g(xi,yi,zi),g(xi+1,yi,zi),fx),l(g(xi,yi+1,zi),g(xi+1,yi+1,zi),fx),fy),
+             l(l(g(xi,yi,zi+1),g(xi+1,yi,zi+1),fx),l(g(xi,yi+1,zi+1),g(xi+1,yi+1,zi+1),fx),fy),fz); };
+  const d=new Uint8Array(N*N*N*2);
+  for (let z=0;z<N;z++) for (let y=0;y<N;y++) for (let x=0;x<N;x++){
+    const px=x/N*L, py=y/N*L, pz=z/N*L, i=(x+y*N+z*N*N)*2;
+    const n0=val(px,py,pz); let f=0,a=.5,m=1; for (let o=0;o<4;o++){ f+=a*val(px*m,py*m,pz*m); m*=2; a*=.5; }
+    d[i]=n0*255; d[i+1]=Math.min(1,f)*255; }
+  const t=new THREE.Data3DTexture(d,N,N,N); t.format=THREE.RGFormat; t.type=THREE.UnsignedByteType;
+  t.minFilter=t.magFilter=THREE.LinearFilter; t.wrapS=t.wrapT=t.wrapR=THREE.RepeatWrapping; t.unpackAlignment=1; t.needsUpdate=true;
+  return t; })();
+const NOISE_GLSL_PROC = `
   float h3(vec3 p){ p=fract(p*.3183099+.1); p*=17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
   float n3(vec3 x){ vec3 i=floor(x),f=fract(x); f=f*f*(3.-2.*f);
     return mix(mix(mix(h3(i),h3(i+vec3(1,0,0)),f.x),mix(h3(i+vec3(0,1,0)),h3(i+vec3(1,1,0)),f.x),f.y),
                mix(mix(h3(i+vec3(0,0,1)),h3(i+vec3(1,0,1)),f.x),mix(h3(i+vec3(0,1,1)),h3(i+vec3(1,1,1)),f.x),f.y),f.z); }
   float fbm3(vec3 p){ float a=.5,s=0.; for(int i=0;i<4;i++){ s+=a*n3(p); p*=2.07; a*=.5; } return s; }`;
+const NOISE_GLSL = `
+  uniform highp sampler3D tNoise;
+  float h3(vec3 p){ p=fract(p*.3183099+.1); p*=17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+  float n3(vec3 x){ return texture(tNoise, x*.0625).r; }
+  float fbm3(vec3 x){ return texture(tNoise, x*.0625).g; }`;
 // Metal with procedural brushing/grime; `zone` mode paints heat-tint bands on the nozzle/chamber by object-space height
 function metal({ color, rough=.35, metal=1, zone=false, aniso=1, grime=.15 }) {
-  const m = new THREE.MeshPhysicalMaterial({ color, roughness:rough, metalness:metal, side:THREE.DoubleSide, envMapIntensity:.9, clearcoat: zone?0:.08, clearcoatRoughness:.4 });
-  m.userData.u = { uHeat:{ value:0 } };
+  const m = Q.physical ? new THREE.MeshPhysicalMaterial({ color, roughness:rough, metalness:metal, side:THREE.DoubleSide, envMapIntensity:.9, clearcoat: zone?0:.08, clearcoatRoughness:.4 })
+                      : new THREE.MeshStandardMaterial({ color, roughness:rough, metalness:metal, side:THREE.DoubleSide, envMapIntensity:.9 });
+  m.userData.u = { uHeat:{ value:0 }, tNoise:{ value:noiseTex } };
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, m.userData.u);
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vOP;')
@@ -502,7 +540,7 @@ const flowMats = [];
 function flowMaterial(c1, c2, gate, speed, mode, extra={}) {
   const m = new THREE.ShaderMaterial({
     transparent:true, depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending,
-    uniforms:{ uPhase:{value:Math.random()*10}, uRate:{value:0}, uC1:{value:new THREE.Color(c1)}, uC2:{value:new THREE.Color(c2)},
+    uniforms:{ tNoise:{value:noiseTex}, uPhase:{value:Math.random()*10}, uRate:{value:0}, uC1:{value:new THREE.Color(c1)}, uC2:{value:new THREE.Color(c2)},
                uMode:{value:mode}, uY0:{value:extra.y0??0}, uY1:{value:extra.y1??1}, uRmax:{value:extra.rmax??9}, uLen:{value:extra.len??1}, uInset:{value:extra.inset??0.006} },
     vertexShader:`attribute float aS; uniform float uInset; varying float vS; varying vec3 vOP; varying vec3 vN, vV;
       void main(){ vS=aS; vOP=position; vec3 p=position-normal*uInset; vec4 mv=modelViewMatrix*vec4(p,1.);
@@ -693,7 +731,7 @@ let cfdGrid=null, cfdPlane=null, cfdTex=null, cfdLast=null, cfdInited=false, fie
 function cfdInit(){
   nozzleState();
   const cy=[], cr=[]; for (let i=0;i<=200;i++){ const y=Y_TOP+(EXIT_Y-Y_TOP)*i/200; cy.push(y); cr.push(wallR(y)); }
-  cfd.postMessage({ type:'init', exitY:EXIT_Y, yTop:Y_TOP, dx:0.03, plumeL:6.5, Rmax:2.4, cy, cr,
+  cfd.postMessage({ type:'init', exitY:EXIT_Y, yTop:Y_TOP, dx:Q.cfdDx, plumeL:6.5, Rmax:2.4, cy, cr,
     tab:{ y:TAB.map(s=>s.y), M:TAB.map(s=>s.M), T:TAB.map(s=>s.T/T0), P:TAB.map(s=>s.Pr) }, pa:nozzle.Pa/nozzle.P0e, P0e:nozzle.P0e });
   cfd.postMessage({ type:'field', field:fieldMode }); cfdInited = true;
 }
@@ -739,7 +777,7 @@ function drawSimPanel(){
 // =====================================================================
 const plumeMat = new THREE.ShaderMaterial({
   transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.FrontSide,
-  uniforms:{ uCam:{value:V3()}, uTime:{value:0}, uPower:{value:0}, uR0:{value:R_EXIT}, uLen:{value:10}, uRmax:{value:R_EXIT*4.6},
+  uniforms:{ tNoise:{value:noiseTex}, uCam:{value:V3()}, uTime:{value:0}, uPower:{value:0}, uR0:{value:R_EXIT}, uLen:{value:10}, uRmax:{value:R_EXIT*4.6},
              uRatio:{value:1}, uLam:{value:2}, uAir:{value:1}, uTorch:{value:0} },
   vertexShader:`varying vec3 vPos; void main(){ vPos=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
   fragmentShader:`
@@ -765,7 +803,7 @@ const plumeMat = new THREE.ShaderMaterial({
       float disc=max(b*b-4.*a*c,0.); float tc2=(-b+sqrt(disc))/(2.*a+1e-6);
       float ty0=(0.-ro.y)/rd.y, ty1=(-uLen-ro.y)/rd.y; float tEnd=min(a>1e-6?tc2:1e9, max(ty0,ty1));
       if (tEnd<=t0) discard;
-      const int STEPS=80; float dt=(tEnd-t0)/float(STEPS);
+      const int STEPS=${Q.steps}; float dt=(tEnd-t0)/float(STEPS);
       float jit=h3(vec3(gl_FragCoord.xy, fract(uTime)*91.))*dt;
       vec3 col=vec3(0.); float vac=1.-uAir;
       for(int i=0;i<STEPS;i++){
@@ -851,7 +889,8 @@ function pick(e){
 let down=null;
 canvas.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
 canvas.addEventListener('pointerup',e=>{ if(down && Math.hypot(e.clientX-down[0],e.clientY-down[1])<5){ const p=pick(e); if(p) select(p); } down=null; });
-canvas.addEventListener('pointermove',e=>{ if(e.buttons){ tip.style.display='none'; return; } const p=pick(e);
+let lastHover=0;
+canvas.addEventListener('pointermove',e=>{ if(e.buttons||e.pointerType==='touch'){ tip.style.display='none'; return; } const now=performance.now(); if(now-lastHover<90) return; lastHover=now; const p=pick(e);
   if(p){ tip.textContent=p.name; tip.style.display='block'; tip.style.left=e.clientX+12+'px'; tip.style.top=e.clientY+12+'px'; canvas.style.cursor='pointer'; } else { tip.style.display='none'; canvas.style.cursor=''; } });
 function applyHardwareMode(){
   hwMats.forEach(m=>{ m.clippingPlanes = cutOn?[clipPlane]:[]; m.transparent = xray; m.opacity = xray?0.13:1; m.depthWrite = !xray; m.needsUpdate=true; });
@@ -862,8 +901,11 @@ $('rot').onchange=e=>controls.autoRotate=e.target.checked;
 $('labelsOn').onchange=e=>labelObjs.forEach(o=>o.visible=e.target.checked);
 $('field').onchange=e=>{ fieldMode=e.target.value; simTick=1; cfd.postMessage({ type:'field', field:fieldMode }); };
 $('fluid').addEventListener('change',e=>{ if(e.target.checked && !cutOn){ $('cut').checked=true; cutOn=true; applyHardwareMode(); } });
-function resetView(){ camera.position.copy(HOME); controls.target.copy(HOME_T); }
+function homePos(){ const a=innerWidth/Math.max(1,innerHeight); const k = a<1 ? 1+0.9*(1-a) : 1; return HOME.clone().sub(HOME_T).multiplyScalar(k).add(HOME_T); }
+function resetView(){ camera.position.copy(homePos()); controls.target.copy(HOME_T); }
 $('reset').onclick=resetView;
+if (innerWidth <= 720) $('ctrl').classList.add('collapsed');
+$('ctrlToggle').onclick=()=>{ const c=$('ctrl').classList.toggle('collapsed'); $('ctrlToggle').textContent = c ? 'Controls ▾' : 'Hide ▴'; };
 
 // =====================================================================
 //  GUIDED TOUR — narrated chapters that drive the camera and the scene
@@ -933,7 +975,8 @@ function applyChapter(i){
   if (s.fire==='restart'){ if (firing||ignT>=0) $('ignite').click(); setTimeout(()=>$('ignite').click(), 900); }
   const P = C.part ? PARTS.find(p=>p.id===C.part) : null;
   if (P !== selected){ if (P) select(P); else if (selected) select(selected); }
-  tour.tw = { t:0, p0:camera.position.clone(), t0:controls.target.clone(), p1:V3(...C.cam), t1:V3(...C.tgt) };
+  const asp=innerWidth/Math.max(1,innerHeight), kf = asp<1 ? 1+0.9*(1-asp) : 1, tg=V3(...C.tgt);
+  tour.tw = { t:0, p0:camera.position.clone(), t0:controls.target.clone(), p1:V3(...C.cam).sub(tg).multiplyScalar(kf).add(tg), t1:tg };
   $('tourN').textContent = `${i+1} / ${TOUR.length}`;
   $('tourT').textContent = C.title;
   $('tourX').textContent = C.text;
@@ -981,7 +1024,7 @@ $('ignite').onclick=e=>{
 //  LOOP
 // =====================================================================
 const clock=new THREE.Clock();
-let simTick=1, cfdRunning=false, paramTick=1;
+let simTick=1, cfdRunning=false, paramTick=1, shadowSig='', frameAcc=0, frameN=0, curDpr=Q.dpr;
 const _p=V3();
 function animate(){
   if (!innerWidth || !innerHeight) { clock.getDelta(); requestAnimationFrame(animate); return; }   // hidden / zero-size viewport
@@ -1025,13 +1068,13 @@ function animate(){
 
   // plume / lights / heat
   const pu=plumeMat.uniforms, air=Math.min(1,nozzle.Pa/1.01325);
-  pu.uTime.value=t; pu.uPower.value=Math.max(power, torch*0.25)*(cfdRunning?0.35:1); pu.uRatio.value=nozzle.ratio; pu.uLam.value=R_EXIT*2.1; pu.uAir.value=air; pu.uTorch.value=torch*(1-power);   // visual cell spacing matched to test-stand footage (CFD computes its own)
+  pu.uTime.value=t%600; pu.uPower.value=Math.max(power, torch*0.25)*(cfdRunning?0.35:1); pu.uRatio.value=nozzle.ratio; pu.uLam.value=R_EXIT*2.1; pu.uAir.value=air; pu.uTorch.value=torch*(1-power);   // visual cell spacing matched to test-stand footage (CFD computes its own)
   plumeMeshes.forEach(m=>m.visible = pu.uPower.value>0.01 && ex<0.02);
   fireLight.intensity = power*28*(0.9+0.08*Math.sin(t*47)+0.05*Math.sin(t*131));
   torchLight.intensity = torch*25;
   MAT.body.userData.u.uHeat.value = power*0.5*(1-0.3*air);
   bloom.strength = 0.2 + power*0.45;
-  hazePass.uniforms.uTime.value = t;
+  hazePass.uniforms.uTime.value = t%600;
   { _p.set(0, EXIT_Y-3.5, 0); body.localToWorld(_p); _p.project(camera);
     hazePass.uniforms.uC.value.set(_p.x*.5+.5, _p.y*.5+.5); hazePass.uniforms.uHaze.value = power*air;
     const d = camera.position.distanceTo(body.getWorldPosition(V3())); hazePass.uniforms.uR.value.set(2.2/d, 4.5/d*camera.aspect*0.6); hazePass.uniforms.uAspect.value = camera.aspect; }
@@ -1048,8 +1091,16 @@ function animate(){
   flowGroup.visible = xray && ex<0.02;
 
   tourUpdate(dt, t);
+  // shadows: re-render only when something that casts them moved
+  if (Q.shadows){ const sig = gimbalGroup.rotation.x.toFixed(4)+gimbalGroup.rotation.z.toFixed(4)+ex.toFixed(3); if (sig!==shadowSig){ shadowSig=sig; renderer.shadowMap.needsUpdate=true; } }
   composer.render();
-  labelRenderer.render(scene, camera);
+  if ($('labelsOn').checked) labelRenderer.render(scene, camera);
+  // dynamic resolution: hold ~55+ fps by scaling the render resolution
+  frameAcc += dt; frameN++;
+  if (frameAcc > 1.0){ const avg = frameAcc/frameN; frameAcc=0; frameN=0;
+    let nd = curDpr;
+    if (avg > 1/48) nd = Math.max(0.6, curDpr*0.85); else if (avg < 1/58 && curDpr < Q.dprMax) nd = Math.min(Q.dprMax, curDpr*1.08);
+    if (Math.abs(nd-curDpr) > 0.02){ curDpr = nd; renderer.setPixelRatio(curDpr); composer.setPixelRatio(curDpr); renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); } }
   requestAnimationFrame(animate);
 }
 $('load').remove();
