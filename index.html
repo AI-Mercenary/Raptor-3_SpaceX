@@ -1,0 +1,1059 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Raptor 3 Engine</title>
+<style>
+  :root { --bg:#030407; --panel:rgba(10,13,19,.86); --line:#222b39; --txt:#e3e8f0; --dim:#8692a6; --acc:#7fb8ff; --hot:#ff9a4a; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--txt); font:14px/1.45 "Inter",system-ui,Segoe UI,Roboto,sans-serif; overflow:hidden; }
+  #c { position:fixed; inset:0; }
+  #labels { position:fixed; inset:0; pointer-events:none; }
+  .ui { position:fixed; background:var(--panel); border:1px solid var(--line); border-radius:12px; backdrop-filter:blur(10px); }
+  #ctrl { top:16px; left:16px; width:288px; padding:14px 16px; max-height:calc(100% - 32px); overflow:auto; }
+  h1 { font-size:15px; margin:0; letter-spacing:.18em; font-weight:700; }
+  .sub { color:var(--dim); font-size:12px; margin:2px 0 8px; }
+  .sec { font-size:10.5px; letter-spacing:.16em; color:var(--dim); margin:12px 0 2px; text-transform:uppercase; border-top:1px solid var(--line); padding-top:10px; }
+  label.row { display:flex; justify-content:space-between; align-items:center; margin:7px 0; gap:10px; font-size:13px; }
+  label.row .v { margin-left:auto; color:var(--dim); font-size:12px; font-variant-numeric:tabular-nums; }
+  input[type=range] { width:116px; accent-color:var(--acc); }
+  input[type=checkbox] { accent-color:var(--acc); width:16px; height:16px; }
+  select { background:#161e2b; color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:3px 6px; font:inherit; font-size:12px; }
+  .btns { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 4px; }
+  button { background:#161e2b; color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:6px 10px; cursor:pointer; font:inherit; font-size:12px; }
+  button:hover, button.on { border-color:var(--acc); color:#fff; }
+  button.fire.on { border-color:var(--hot); background:#33190b; }
+  #parts { list-style:none; padding:0; margin:6px 0 0; font-size:12px; }
+  #parts li { padding:4px 6px; border-radius:6px; cursor:pointer; display:flex; gap:8px; align-items:center; }
+  #parts li:hover, #parts li.sel { background:#1a2333; }
+  .sw { width:10px; height:10px; border-radius:3px; flex:none; }
+  #info { right:16px; top:16px; width:340px; padding:16px; display:none; max-height:calc(100% - 290px); overflow:auto; }
+  #info h2 { margin:0 0 6px; font-size:15px; color:var(--acc); }
+  #info p { margin:0 0 8px; color:#c6d0de; font-size:13px; }
+  #info table { width:100%; border-collapse:collapse; font-size:12px; }
+  #info td { padding:3px 0; border-top:1px solid var(--line); vertical-align:top; }
+  #info td:last-child { text-align:right; color:#fff; padding-left:10px; }
+  #specs { right:16px; bottom:16px; width:290px; padding:12px 16px; font-size:12px; }
+  #specs b { color:#fff; font-variant-numeric:tabular-nums; }
+  #specs div { display:flex; justify-content:space-between; border-top:1px solid var(--line); padding:3px 0; }
+  #specs div:first-child { border-top:0; }
+  #tip { position:fixed; pointer-events:none; padding:4px 8px; background:#000c; border:1px solid var(--line); border-radius:6px; font-size:12px; display:none; }
+  #seq { color:var(--hot); font-size:12px; min-height:18px; margin-top:4px; font-family:ui-monospace,Consolas,monospace; }
+  #sim { left:320px; right:322px; bottom:16px; padding:10px 14px; display:none; font-size:12px; }
+  .simhead { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:8px; }
+  #regime { font-size:11px; padding:2px 8px; border-radius:20px; background:#1a2333; white-space:nowrap; }
+  #cfdstat { color:var(--dim); font-size:11px; margin:0 0 4px; font-family:ui-monospace,Consolas,monospace; }
+  #plot { width:100%; height:110px; display:block; }
+  .legend { display:flex; align-items:center; gap:8px; margin:6px 0; color:var(--dim); font-size:11px; }
+  #lbar { flex:1; height:8px; border-radius:4px; }
+  .g6 { display:grid; grid-template-columns:repeat(3,1fr); gap:2px 14px; }
+  .g6 div { display:flex; justify-content:space-between; border-top:1px solid var(--line); padding:2px 0; }
+  .g6 b { color:#fff; font-variant-numeric:tabular-nums; }
+  .lbl { font-size:11px; color:#e8eef7; background:rgba(6,9,14,.8); border:1px solid #2b3a52; padding:2px 7px; border-radius:5px; white-space:nowrap; transform:translate(12px,-50%); }
+  .lbl::before { content:''; position:absolute; left:-12px; top:50%; width:12px; border-top:1px solid var(--acc); }
+  #credit { position:fixed; left:50%; transform:translateX(-50%); top:10px; font-size:11px; color:#6d788b; pointer-events:none; text-align:center; }
+  #credit a { color:#8fa3c2; pointer-events:auto; }
+  #load { position:fixed; inset:0; display:grid; place-items:center; color:var(--dim); font-size:12px; letter-spacing:.2em; }
+
+  .tourbtn { width:100%; margin:6px 0 2px; padding:9px 10px; font-weight:600; border-color:#3a5a86; background:linear-gradient(180deg,#1b2b44,#14203a); }
+  #ctrl.dim { opacity:.35; transition:opacity .3s; } #ctrl.dim:hover { opacity:1; }
+  #tour { left:50%; transform:translateX(-50%); top:34px; width:min(560px, calc(100% - 32px)); padding:14px 18px 12px; display:none; z-index:5; }
+  #tour .th { display:flex; align-items:center; gap:10px; color:var(--dim); font-size:11px; letter-spacing:.1em; }
+  #tourDots { display:flex; gap:4px; flex:1; } #tourDots i { width:14px; height:3px; border-radius:2px; background:#2a3446; } #tourDots i.on { background:var(--acc); }
+  #tour h3 { margin:8px 0 6px; font-size:17px; color:#fff; }
+  #tour p { margin:0 0 8px; font-size:13.5px; color:#cbd4e1; line-height:1.55; }
+  #tour p.why { color:#a9b8cc; border-left:2px solid var(--hot); padding-left:10px; font-size:13px; }
+  #tour .tb { display:flex; align-items:center; justify-content:space-between; margin-top:6px; } .kh { color:#5d687a; font-size:11px; }
+  button.pri { background:#24508f; border-color:#3d72c4; color:#fff; } button:disabled { opacity:.35; cursor:default; }
+  #tourEnd, #cycleX { padding:2px 8px; }
+  #cycle { right:16px; bottom:16px; width:390px; max-height:calc(100% - 300px); overflow:auto; padding:12px 14px; display:none; z-index:4; }
+  #cycle .th { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:13px; }
+  #cycle svg text { fill:#dfe6f0; font:600 11px system-ui; text-anchor:middle; } #cycle svg text.s { font-weight:400; fill:#9aa6b8; font-size:9.5px; }
+  #cycle .nd { fill:#141c29; stroke:#3a475c; stroke-width:1.2; } #cycle .nd.lox{stroke:#5fb0ff} #cycle .nd.ch4{stroke:#ffb03a} #cycle .nd.hotox{stroke:#9fd0ff; fill:#13233a} #cycle .nd.hotf{stroke:#ff7a3a; fill:#2a160e}
+  #cycle .fl { fill:none; stroke-width:3.2; stroke-dasharray:7 6; animation:flow 1s linear infinite; } #cycle .fl.thin{ stroke-width:1.6; stroke-dasharray:4 5; }
+  #cycle .fl.lox{stroke:#5fb0ff} #cycle .fl.ch4{stroke:#ffb03a} #cycle .fl.hotox{stroke:#9fd0ff} #cycle .fl.hotf{stroke:#ff7a3a} #cycle .fl.exh{stroke:#d9a0ff}
+  #cycle .shaft { stroke:#6b778a; stroke-width:2; stroke-dasharray:2 3; }
+  @keyframes flow { to { stroke-dashoffset:-13; } }
+  #cycle .cl { display:flex; flex-wrap:wrap; gap:10px; font-size:11px; color:var(--dim); margin:4px 0; } #cycle .cl i { display:inline-block; width:10px; height:3px; margin-right:4px; vertical-align:middle; } #cycle .cl i.sh { border-top:2px dotted #6b778a; height:0; }
+  #cycle .cn { font-size:12px; color:#aab6c7; margin:4px 0 0; }
+  details.how { font-size:12px; color:#b6c2d3; margin:4px 0 2px; } details.how summary { cursor:pointer; color:var(--acc); }
+  details.how p { margin:4px 0; }
+  @media (max-width:1150px){ #sim{ right:16px; } #specs{ display:none; } }
+  @media (max-width:720px){ #ctrl{width:calc(100% - 32px); max-height:42%;} #info{left:16px; right:16px; width:auto; top:auto; bottom:16px;} #sim{left:16px;} #credit{display:none;} }
+</style>
+</head>
+<body>
+<div id="load">LOADING RAPTOR 3…</div>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div id="credit">3D model: <a href="https://sketchfab.com/3d-models/none-2d3918a9edcb4eedbf2d180391113e3a" target="_blank" rel="noopener">"SpaceX Starship Raptor 3 engine"</a> by VoitAa on Sketchfab (an Epic Games company) · CC BY 4.0 · materials, simulation &amp; scene: original</div>
+
+<div id="ctrl" class="ui">
+  <h1>RAPTOR 3</h1>
+  <div class="sub">Full-flow staged combustion · LOX / CH₄ · Starship &amp; Super Heavy</div>
+  <button id="tourBtn" class="tourbtn">▶ Guided tour — how Raptor works</button>
+
+  <div class="sec">View</div>
+  <label class="row">Exploded view <input id="explode" type="range" min="0" max="1" step="0.01" value="0"></label>
+  <label class="row">Cutaway (half section) <input id="cut" type="checkbox"></label>
+  <label class="row">Part labels <input id="labelsOn" type="checkbox"></label>
+  <label class="row">Auto-rotate <input id="rot" type="checkbox"></label>
+
+  <div class="sec">Operation</div>
+  <label class="row">Throttle <span class="v" id="thrv">100%</span><input id="throttle" type="range" min="0.4" max="1" step="0.01" value="1"></label>
+  <label class="row">Gimbal pitch <span class="v" id="gpv">0°</span><input id="gimbal" type="range" min="-15" max="15" step="0.1" value="0"></label>
+  <label class="row">Gimbal yaw <span class="v" id="gyv">0°</span><input id="gimbalY" type="range" min="-15" max="15" step="0.1" value="0"></label>
+  <label class="row">Altitude <span class="v" id="altv">0 km</span><input id="alt" type="range" min="0" max="80" step="0.5" value="0"></label>
+  <div class="btns">
+    <button id="ignite" class="fire">🔥 Start sequence</button>
+    <button id="reset">Reset view</button>
+    <button id="cycleBtn">Cycle diagram</button>
+  </div>
+  <div id="seq"></div>
+
+  <div class="sec">Fluids</div>
+  <label class="row">Propellant flow (X-ray) <input id="flow" type="checkbox"></label>
+  <label class="row">CFD: chamber, nozzle &amp; plume <input id="fluid" type="checkbox"></label>
+  <label class="row">CFD field <select id="field"><option value="T">Temperature</option><option value="M">Mach number</option><option value="V">Velocity</option><option value="P">Pressure</option><option value="S">Schlieren (density gradient)</option></select></label>
+  <label class="row">Flow speed <input id="simspd" type="range" min="0.05" max="2" step="0.05" value="1"></label>
+
+  <div class="sec">Components</div>
+  <ul id="parts"></ul>
+</div>
+
+<div id="info" class="ui"></div>
+
+<div id="specs" class="ui">
+  <div><span>Thrust (sea level)</span><b id="thr">0 kN</b></div>
+  <div><span>Chamber pressure</span><b id="pc">0 bar</b></div>
+  <div><span>Isp SL / vac (RVac)</span><b>~327 s / ~380 s</b></div>
+  <div><span>Propellant flow</span><b id="mdot">0 kg/s</b></div>
+  <div><span>Mixture ratio O/F</span><b>~3.6</b></div>
+  <div><span>Preburners</span><b id="pb">off</b></div>
+  <div><span>Mass / T:W</span><b>~1,525 kg / ~184</b></div>
+</div>
+
+<div id="sim" class="ui">
+  <div class="simhead"><b>CFD — centre-line profile</b><span id="regime"></span></div>
+  <div id="cfdstat"></div>
+  <details class="how"><summary>How to read this</summary>
+    <p><b>The slice</b> is a vertical cut through the engine axis, mirrored left/right. Each pixel is one solver cell coloured by the selected field. Still ambient air is left transparent so only the jet shows.</p>
+    <p><b>Temperature</b>: chamber ≈3,550 K, cooling as the gas expands; it re-heats at shocks. <b>Mach</b>: &lt;1 in the chamber, exactly 1 at the throat, ≈3.9 at the exit. <b>Pressure</b>: log scale — 350 bar in the chamber down to ~1 bar. <b>Schlieren</b>: dark = sharp density change, i.e. shock waves and the jet boundary.</p>
+    <p><b>The graph</b> shows Mach, temperature and pressure along the centre-line from injector (left) to plume (right). Saw-tooth wiggles after the exit are the shock cells. <b>Residual</b> measures how much the solution is still changing — lower means more converged.</p>
+    <p><b>Model</b>: inviscid (no viscosity/turbulence), single gas with γ=1.2, no chemistry or afterburning, 2-D axisymmetric. Good for shock structure and nozzle performance; not a substitute for full reacting 3-D CFD.</p>
+  </details>
+  <canvas id="plot" width="900" height="220"></canvas>
+  <div class="legend"><span id="lmin"></span><div id="lbar"></div><span id="lmax"></span></div>
+  <div class="g6">
+    <div><span>Exit Mach</span><b id="sMe"></b></div>
+    <div><span>Exit velocity</span><b id="sVe"></b></div>
+    <div><span>Exit temp</span><b id="sTe"></b></div>
+    <div><span>Exit pressure</span><b id="sPe"></b></div>
+    <div><span>Ambient</span><b id="sPa"></b></div>
+    <div><span>Isp (1-D ideal)</span><b id="sIsp"></b></div>
+  </div>
+</div>
+<div id="tip"></div>
+<div id="tour" class="ui">
+  <div class="th"><span id="tourN"></span><div id="tourDots"></div><button id="tourEnd" title="Exit tour (Esc)">✕</button></div>
+  <h3 id="tourT"></h3>
+  <p id="tourX"></p>
+  <p id="tourW" class="why"></p>
+  <div class="tb"><button id="tourPrev">← Back</button><span class="kh">← → keys</span><button id="tourNext" class="pri">Next →</button></div>
+</div>
+
+<div id="cycle" class="ui">
+  <div class="th"><b>Full-flow staged combustion</b><button id="cycleX">✕</button></div>
+  <svg viewBox="0 0 380 330" width="100%">
+    <defs><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8a97ab"/></marker></defs>
+    <!-- tanks -->
+    <rect class="nd lox" x="20" y="8" width="110" height="28" rx="6"/><text x="75" y="26">LOX tank</text>
+    <rect class="nd ch4" x="250" y="8" width="110" height="28" rx="6"/><text x="305" y="26">CH₄ tank</text>
+    <!-- pumps -->
+    <rect class="nd" x="30" y="66" width="90" height="28" rx="14"/><text x="75" y="84">LOX pump</text>
+    <rect class="nd" x="260" y="66" width="90" height="28" rx="14"/><text x="305" y="84">CH₄ pump</text>
+    <!-- regen -->
+    <rect class="nd ch4" x="262" y="122" width="86" height="40" rx="6"/><text x="305" y="139">Regen cooling</text><text x="305" y="153" class="s">nozzle + chamber</text>
+    <!-- preburners -->
+    <rect class="nd hotox" x="18" y="132" width="114" height="34" rx="6"/><text x="75" y="147">Ox-rich</text><text x="75" y="160" class="s">preburner</text>
+    <rect class="nd hotf" x="248" y="186" width="114" height="34" rx="6"/><text x="305" y="201">Fuel-rich</text><text x="305" y="214" class="s">preburner</text>
+    <!-- turbines -->
+    <rect class="nd" x="30" y="190" width="90" height="26" rx="13"/><text x="75" y="207">Ox turbine</text>
+    <rect class="nd" x="260" y="240" width="90" height="26" rx="13"/><text x="305" y="257">Fuel turbine</text>
+    <!-- chamber -->
+    <path class="nd" d="M150,236 h80 v26 l14,40 h-108 l14,-40 z"/><text x="190" y="254">Main chamber</text><text x="190" y="290" class="s">nozzle → thrust</text>
+    <!-- shafts -->
+    <line class="shaft" x1="75" y1="94" x2="75" y2="132"/><line class="shaft" x1="138" y1="203" x2="138" y2="80"/><line class="shaft" x1="120" y1="203" x2="138" y2="203"/><line class="shaft" x1="120" y1="80" x2="138" y2="80"/>
+    <line class="shaft" x1="350" y1="253" x2="368" y2="253"/><line class="shaft" x1="368" y1="253" x2="368" y2="80"/><line class="shaft" x1="350" y1="80" x2="368" y2="80"/>
+    <!-- flows -->
+    <path class="fl lox" d="M75,36 V66" marker-end="url(#ar)"/>
+    <path class="fl lox" d="M60,94 V132" marker-end="url(#ar)"/>
+    <path class="fl lox thin" d="M100,94 C170,110 200,190 248,200" marker-end="url(#ar)"/>
+    <path class="fl ch4" d="M305,36 V66" marker-end="url(#ar)"/>
+    <path class="fl ch4" d="M305,94 V122" marker-end="url(#ar)"/>
+    <path class="fl ch4 thin" d="M280,94 C220,105 170,120 132,142" marker-end="url(#ar)"/>
+    <path class="fl ch4" d="M305,162 V186" marker-end="url(#ar)"/>
+    <path class="fl hotox" d="M75,166 V190" marker-end="url(#ar)"/>
+    <path class="fl hotox" d="M75,216 C80,240 120,248 150,249" marker-end="url(#ar)"/>
+    <path class="fl hotf" d="M305,220 V240" marker-end="url(#ar)"/>
+    <path class="fl hotf" d="M260,253 C250,252 240,250 230,249" marker-end="url(#ar)"/>
+    <path class="fl exh" d="M190,302 V326" marker-end="url(#ar)"/>
+  </svg>
+  <div class="cl"><span><i style="background:#5fb0ff"></i>LOX</span><span><i style="background:#ffb03a"></i>CH₄</span><span><i style="background:#9fd0ff"></i>Ox-rich gas</span><span><i style="background:#ff7a3a"></i>Fuel-rich gas</span><span><i class="sh"></i>shaft</span></div>
+  <p class="cn">All oxygen and all methane pass through a preburner and a turbine before reaching the main chamber — nothing is dumped. Thin lines: the small cross-feeds that let each preburner burn.</p>
+</div>
+
+
+<script src="model/raptor-model.js"></script>
+<script src="model/ducts.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const $ = id => document.getElementById(id);
+const V3 = (x=0,y=0,z=0) => new THREE.Vector3(x,y,z);
+const rnd = (a,b) => a + Math.random()*(b-a);
+
+// =====================================================================
+//  ENGINE FACTS & SCALE  (model: 1 unit ≈ 0.585 m; engine ≈ 3.1 m tall)
+// =====================================================================
+const UNIT_M = 0.585;
+const GAM = 1.2, RGAS = 390, T0 = 3550, P0 = 350;    // LOX/CH4 @ O/F≈3.6 combustion products, Pc 350 bar
+const THRUST_SL = 2746;                              // kN (280 tf)
+const MDOT = 860;                                    // kg/s (approx, F/(Isp·g0))
+const PIVOT = 2.2;                                   // gimbal centre, model y
+// Inner gas-path contour measured from the model's chamber/nozzle shell (y, r) in model units
+const CONTOUR = [[0.92,0.36],[0.75,0.36],[0.6,0.35],[0.5,0.325],[0.4,0.275],[0.32,0.228],[0.25,0.206],[0.17,0.228],[0.07,0.265],
+  [-0.1,0.321],[-0.3,0.4],[-0.5,0.47],[-0.8,0.615],[-1.0,0.7],[-1.25,0.79],[-1.5,0.875],[-1.75,0.94],[-2.0,1.015],[-2.25,1.058],[-2.54,1.076]];
+const Y_TOP = 0.9, EXIT_Y = -2.54, THROAT_Y = 0.25, R_THROAT = 0.206, R_EXIT = 1.076;
+function wallR(y){
+  if (y >= CONTOUR[0][0]) return CONTOUR[0][1];
+  for (let k=1;k<CONTOUR.length;k++){ const a=CONTOUR[k-1], b=CONTOUR[k]; if (y<=a[0] && y>=b[0]) { const t=(y-a[0])/(b[0]-a[0]); const s=t*t*(3-2*t)*0.3+t*0.7; return a[1]+(b[1]-a[1])*s; } }
+  return R_EXIT;
+}
+
+// =====================================================================
+//  RENDERER / SCENE / POST
+// =====================================================================
+const canvas = $('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.localClippingEnabled = true;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x030407);
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.035).texture;
+scene.fog = new THREE.FogExp2(0x05070b, 0.028);
+
+const camera = new THREE.PerspectiveCamera(32, innerWidth/innerHeight, 0.05, 400);
+const HOME = V3(9.5, 0.2, 12.5), HOME_T = V3(0, -1.6, 0);
+camera.position.copy(HOME);
+const controls = new OrbitControls(camera, canvas);
+controls.target.copy(HOME_T); controls.enableDamping = true; controls.minDistance = 1.2; controls.maxDistance = 90;
+
+// Cinematic test-cell lighting: cool key, warm kicker, cold rim, soft fill from below
+scene.add(new THREE.HemisphereLight(0x9fb8d8, 0x120c08, 0.35));
+const key = new THREE.SpotLight(0xdfe9ff, 120, 40, 0.42, 0.6, 1.6);
+key.position.set(6, 9, 7); key.target.position.set(0,0,0); key.castShadow = true; key.shadow.mapSize.set(2048,2048); key.shadow.bias = -0.0003;
+scene.add(key, key.target);
+const kicker = new THREE.SpotLight(0xffb070, 60, 30, 0.5, 0.8, 1.6); kicker.position.set(-7, 2, 3); scene.add(kicker, kicker.target);
+const rim = new THREE.DirectionalLight(0x6f9fff, 1.6); rim.position.set(-4, 5, -8); scene.add(rim);
+const fill = new THREE.DirectionalLight(0xffffff, 0.25); fill.position.set(2, -6, 5); scene.add(fill);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.3, 0.6, 0.85); composer.addPass(bloom);
+// heat-haze + film grain + vignette (screen-space, only distorts around the projected plume when firing)
+const hazePass = new ShaderPass({
+  uniforms:{ tDiffuse:{value:null}, uTime:{value:0}, uHaze:{value:0}, uC:{value:new THREE.Vector2(.5,.3)}, uR:{value:new THREE.Vector2(.1,.3)}, uAspect:{value:1} },
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader:`uniform sampler2D tDiffuse; uniform float uTime,uHaze,uAspect; uniform vec2 uC,uR; varying vec2 vUv;
+    float h(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
+    float n(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+1.),f.x),f.y); }
+    void main(){
+      vec2 d=(vUv-uC)/max(uR,vec2(1e-3)); float m=uHaze*exp(-dot(d,d)*1.4);
+      vec2 o=vec2(n(vUv*vec2(40.,18.)+vec2(0.,uTime*6.))-.5, n(vUv*vec2(22.,40.)-vec2(uTime*5.,0.))-.5)*0.012*m;
+      vec4 c=texture2D(tDiffuse, vUv+o);
+      float v=smoothstep(1.25,.35,length((vUv-.5)*vec2(uAspect,1.)));
+      c.rgb*=mix(.55,1.,v);
+      c.rgb+= (h(vUv*vec2(1731.,977.)+fract(uTime))-.5)*.025;
+      gl_FragColor=c; }`
+});
+composer.addPass(hazePass);
+composer.addPass(new OutputPass());
+
+const labelRenderer = new CSS2DRenderer({ element: $('labels') });
+labelRenderer.setSize(innerWidth, innerHeight);
+
+// =====================================================================
+//  TEST STAND (original scene): thrust-takeout frame, flame trench, deck
+// =====================================================================
+const stand = new THREE.Group(); scene.add(stand);
+const concrete = new THREE.MeshStandardMaterial({ color:0x1a1c20, roughness:.95, metalness:.05 });
+const steelPaint = new THREE.MeshStandardMaterial({ color:0x2b3038, roughness:.6, metalness:.6 });
+const rust = new THREE.MeshStandardMaterial({ color:0x3a2c24, roughness:.85, metalness:.3 });
+{
+  const deckY = -6.2;
+  // deck with an open flame trench (x∈[-3,3], z∈[-4,24]) so the plume can flow down onto the deflector
+  [[-11.5,0,17,40],[11.5,0,17,40],[0,-12,6,16]].forEach(([x,z,w,d])=>{ const b=new THREE.Mesh(new THREE.BoxGeometry(w,0.6,d), concrete); b.position.set(x,deckY-0.3,z); b.receiveShadow=true; stand.add(b); });
+  const trenchMat = new THREE.MeshStandardMaterial({ color:0x111214, roughness:1 });
+  [[-3.1,8],[3.1,8]].forEach(([x,z])=>{ const w=new THREE.Mesh(new THREE.BoxGeometry(0.2,6,28), trenchMat); w.position.set(x,deckY-3,z); stand.add(w); });
+  const back = new THREE.Mesh(new THREE.BoxGeometry(6.4,6,0.2), trenchMat); back.position.set(0,deckY-3,-6); stand.add(back);
+  const tfloor = new THREE.Mesh(new THREE.BoxGeometry(6.4,0.2,28), trenchMat); tfloor.position.set(0,deckY-6,8); stand.add(tfloor);
+  // water-cooled steel deflector ramp turning the exhaust down-range
+  const defl = new THREE.Mesh(new THREE.BoxGeometry(6, 0.25, 9), rust); defl.position.set(0, deckY-4.2, 1.5); defl.rotation.x = -0.6; defl.receiveShadow=true; stand.add(defl);
+  // I-beam helper
+  const ibeam = (len, w=0.45, h=0.6) => { const g=new THREE.Group(); const f=new THREE.BoxGeometry(len, 0.06, w), web=new THREE.BoxGeometry(len, h, 0.05);
+    const a=new THREE.Mesh(f,steelPaint), b=new THREE.Mesh(f,steelPaint), c=new THREE.Mesh(web,steelPaint); a.position.y=h/2; b.position.y=-h/2; g.add(a,b,c); g.traverse(o=>{ if(o.isMesh){ o.castShadow=o.receiveShadow=true; } }); return g; };
+  const topY = PIVOT + 1.15;
+  [-2.8, 2.8].forEach(z=>{ const b=ibeam(9); b.position.set(0, topY, z); stand.add(b); });
+  [-3.6, 3.6].forEach(x=>{ const b=ibeam(6.2); b.rotation.y=Math.PI/2; b.position.set(x, topY+0.66, 0); stand.add(b); });
+  const cross = ibeam(7.2, 0.6, 0.8); cross.position.set(0, topY+0.1, 0); cross.rotation.y=Math.PI/2; stand.add(cross);
+  [[-4.2,-3.2],[4.2,-3.2],[-4.2,3.2],[4.2,3.2]].forEach(([x,z])=>{ const c=ibeam(topY-deckY+1, 0.5, 0.5); c.rotation.z=Math.PI/2; c.position.set(x,(topY+deckY)/2+0.3,z); stand.add(c); });
+  // thrust puck / load cell
+  const puck = new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.5,0.6,48), new THREE.MeshStandardMaterial({ color:0x8a9099, metalness:1, roughness:.35 })); puck.position.y = PIVOT+0.75; puck.castShadow=true; stand.add(puck);
+  // stand lights (small emissive fixtures) for cinematic practicals
+  [[-4.2,topY-0.6,-3.2],[4.2,topY-0.6,3.2]].forEach(p=>{ const l=new THREE.Mesh(new THREE.BoxGeometry(.3,.12,.18), new THREE.MeshBasicMaterial({ color:0xffd9a0 })); l.position.set(...p); stand.add(l); });
+}
+
+// =====================================================================
+//  MATERIALS (original, procedural — no textures from the model)
+// =====================================================================
+const clipPlane = new THREE.Plane(V3(0,0,-1), 0);
+const hwMats = [];
+const NOISE_GLSL = `
+  float h3(vec3 p){ p=fract(p*.3183099+.1); p*=17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+  float n3(vec3 x){ vec3 i=floor(x),f=fract(x); f=f*f*(3.-2.*f);
+    return mix(mix(mix(h3(i),h3(i+vec3(1,0,0)),f.x),mix(h3(i+vec3(0,1,0)),h3(i+vec3(1,1,0)),f.x),f.y),
+               mix(mix(h3(i+vec3(0,0,1)),h3(i+vec3(1,0,1)),f.x),mix(h3(i+vec3(0,1,1)),h3(i+vec3(1,1,1)),f.x),f.y),f.z); }
+  float fbm3(vec3 p){ float a=.5,s=0.; for(int i=0;i<4;i++){ s+=a*n3(p); p*=2.07; a*=.5; } return s; }`;
+// Metal with procedural brushing/grime; `zone` mode paints heat-tint bands on the nozzle/chamber by object-space height
+function metal({ color, rough=.35, metal=1, zone=false, aniso=1, grime=.15 }) {
+  const m = new THREE.MeshPhysicalMaterial({ color, roughness:rough, metalness:metal, side:THREE.DoubleSide, envMapIntensity:.9, clearcoat: zone?0:.08, clearcoatRoughness:.4 });
+  m.userData.u = { uHeat:{ value:0 } };
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, m.userData.u);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vOP;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvOP = position;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vOP; uniform float uHeat;\n'+NOISE_GLSL)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float ang = atan(vOP.z, vOP.x);
+        float brush = n3(vec3(ang*60., vOP.y*900., 0.)) * ${aniso.toFixed(2)};
+        float grime = fbm3(vOP*2.2);
+        diffuseColor.rgb *= mix(1., .75+.5*grime, ${grime.toFixed(2)});
+        ${zone ? `
+        float y = vOP.y;
+        // heat-tint: straw → bronze → violet → blue → gunmetal moving down from throat, sooty lip
+        vec3 straw=vec3(.78,.62,.38), bronze=vec3(.55,.36,.22), violet=vec3(.36,.26,.42), blue=vec3(.22,.3,.48), gun=vec3(.24,.25,.27), soot=vec3(.08,.075,.07);
+        float t = clamp((0.35 - y)/2.9, 0., 1.);
+        vec3 tint = mix(straw, bronze, smoothstep(.0,.08,t));
+        tint = mix(tint, violet, smoothstep(.08,.16,t));
+        tint = mix(tint, blue, smoothstep(.16,.26,t));
+        tint = mix(tint, gun, smoothstep(.26,.45,t));
+        tint = mix(tint, soot, smoothstep(.85,1.,t)*.6);
+        float band = .85 + .15*sin(y*90. + fbm3(vOP*3.)*6.);
+        tint *= band * (.85 + .3*fbm3(vec3(ang*3., y*14., 1.)));
+        // chamber + powerhead stay bright machined steel
+        vec3 steel = vec3(.74,.75,.77) * (.9 + .15*grime);
+        float isNoz = smoothstep(0.45, 0.25, y);
+        float isPH = smoothstep(0.95, 1.05, y);
+        diffuseColor.rgb = mix(steel*mix(vec3(1.),vec3(1.,.93,.82),smoothstep(1.,.45,y)), tint, isNoz);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.78,.79,.81)*(.92+.1*grime), isPH);
+        ` : ''}
+      `)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = clamp(roughnessFactor + (brush-.5)*.08 + (fbm3(vOP*3.)-.5)*.14, .05, 1.);`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        ${zone ? `float glow = uHeat * smoothstep(0.5, 0.15, vOP.y) * smoothstep(-2.6, -0.6, vOP.y) * (0.7+0.3*fbm3(vOP*5.));
+        totalEmissiveRadiance += vec3(1., .32, .08) * glow * 0.9;` : ''}`);
+  };
+  hwMats.push(m);
+  return m;
+}
+const MAT = {
+  body:     metal({ color:0xffffff, rough:.42, zone:true, grime:.08 }),
+  manifold: metal({ color:0xb9bcc2, rough:.28 }),
+  duct:     metal({ color:0xc2c6cc, rough:.3 }),
+  pump:     metal({ color:0xa9adb4, rough:.36, grime:.2 }),
+  preburn:  metal({ color:0x9c8f84, rough:.42, grime:.3 }),     // hot-section, heat-stained
+  block:    metal({ color:0xc8ccd2, rough:.26 }),
+  dark:     metal({ color:0x2a2d33, rough:.5, metal:.6, grime:.1 }),
+  gold:     metal({ color:0xc9a35a, rough:.3 }),
+  lines:    metal({ color:0x9fa4ab, rough:.32 }),
+};
+
+// =====================================================================
+//  LOAD MODEL (decoded from model/raptor-model.js)
+// =====================================================================
+const MD = window.RAPTOR_MODEL;
+const b64 = s => Uint8Array.from(atob(s), c=>c.charCodeAt(0)).buffer;
+const root = new THREE.Group(); scene.add(root);                         // fixed frame
+const gimbalGroup = new THREE.Group(); gimbalGroup.position.y = PIVOT; root.add(gimbalGroup);
+const body = new THREE.Group(); body.position.y = -PIVOT; gimbalGroup.add(body);   // gimballing engine, model coords
+const meshes = {};
+MD.objects.forEach(o=>{
+  const q = new Int16Array(b64(o.pos)), p = new Float32Array(q.length);
+  for (let i=0;i<q.length;i++){ const a=i%3; p[i] = MD.min[a] + (q[i]+32767)/65534*(MD.max[a]-MD.min[a]); }
+  const n8 = new Int8Array(b64(o.nrm)), nf = new Float32Array(o.n*3); for (let i=0;i<o.n*3;i++) nf[i]=n8[i]/127;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(p,3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nf,3));
+  g.setIndex(new THREE.BufferAttribute(o.idx32 ? new Uint32Array(b64(o.idx)) : new Uint16Array(b64(o.idx)), 1));
+  g.computeBoundingBox(); g.computeBoundingSphere();
+  const m = new THREE.Mesh(g, MAT.dark); m.name = o.name; m.castShadow = m.receiveShadow = true;
+  meshes[o.name] = m;
+});
+
+// =====================================================================
+//  COMPONENTS — mapped onto the model's objects (identified by inspection)
+// =====================================================================
+const PARTS = [
+  { id:'nozzle', name:'Regeneratively-cooled nozzle', color:'#4a4f6e', mat:'body', objs:['Cylinder'], yr:[-9,0.25],
+    desc:'Bell nozzle that expands the exhaust from Mach 1 at the throat to ~Mach 3.9 at the exit. On Raptor the sea-level nozzle is regeneratively cooled: methane runs through channels in the wall before reaching the injector, which is why it shows straw/bronze/blue heat-tint bands near the throat rather than glowing.',
+    specs:{ 'Area ratio (model)':'≈27 : 1', 'Exit diameter':'≈1.3 m', 'Cooling':'Regenerative (CH₄)', 'Exit pressure (100%)':'≈1–1.4 bar (near-matched at SL)' } },
+  { id:'chamber', name:'Main combustion chamber & throat', color:'#c9a079', mat:'body', objs:['Cylinder','Cylinder.004'], yr:[0.25,0.95],
+    desc:'Here both propellants arrive fully gasified — the hallmark of full-flow staged combustion — so combustion is gas–gas and extremely efficient. Chamber pressure is ~350 bar, the highest of any operational rocket engine. The throat (narrowest section) sees peak heat flux; its copper-alloy liner is cooled by methane in milled channels.',
+    specs:{ 'Chamber pressure':'~350 bar', 'Flame temperature':'~3,550 K', 'Throat diameter (model)':'≈0.24 m', 'Liner':'Copper alloy, channel-wall' } },
+  { id:'powerhead', name:'Powerhead: main injector & gimbal spine', color:'#d8dbe0', mat:'body', objs:['Cylinder','Cylinder.001_Cylinder.002','Cylinder.011_Cylinder.027'], yr:[0.95,9],
+    desc:'The main injector mixes oxygen-rich hot gas (from the ox-rich preburner) with fuel-rich hot gas (from the fuel-rich preburner). Above it, the spine carries the gimbal bearing and propellant inlets; Raptor 3 integrated most plumbing into the structure, giving it its famously "naked", clean look and removing the heat shield on the engine.',
+    specs:{ 'Injection':'Gas–gas (both preburner exhausts)', 'Gimbal':'±15° (center engines)', 'Interface':'Thrust puck / gimbal block' } },
+  { id:'manifolds', name:'Coolant & injector manifolds', color:'#9aa3b5', mat:'manifold', objs:['Torus','Torus.002','Torus.006','Torus.007'],
+    desc:'Toroidal manifolds distribute methane around the circumference of the nozzle and chamber cooling jacket and collect it again for transfer to the fuel-rich preburner.',
+    specs:{ 'Fluid':'Supercritical CH₄', 'Count (model)':'4 rings' } },
+  { id:'turbopump', name:'Turbopump (pump + turbine)', color:'#8a93a5', mat:'pump', objs:['Cylinder.002_Cylinder.003'],
+    desc:'Each propellant has its own turbopump driven by its own preburner: the oxygen pump by the oxygen-rich preburner, the methane pump by the fuel-rich preburner. Because 100% of each propellant passes through a turbine, turbine temperatures can stay low while pump power is enormous. This model shows one pump/preburner stack; real Raptor has two on opposite sides.',
+    specs:{ 'Arrangement':'One per propellant (model shows one)', 'Driving gas':'Entire propellant flow', 'Discharge':'> 500 bar' } },
+  { id:'preburner', name:'Preburner', color:'#a07a62', mat:'preburn', objs:['Cylinder.003_Cylinder.013'],
+    desc:'A small combustor that burns a sliver of one propellant with all of the other (very off-ratio) to make hot, high-pressure gas that drives the turbine. The ox-rich preburner needs exotic oxidation-resistant alloys (SpaceX SX500) because hot gaseous oxygen attacks most metals.',
+    specs:{ 'Ox-rich side':'~Majority LOX, hot GOX', 'Fuel-rich side':'~Majority CH₄', 'Ignition':'Spark torch' } },
+  { id:'coolduct', name:'Coolant supply duct', color:'#b8c0cc', mat:'duct', objs:['Cylinder.007_Cylinder.020'], duct:'Cylinder.007_Cylinder.020', fluid:'ch4',
+    desc:'Large-bore line carrying high-pressure methane from the fuel pump down to the regenerative-cooling inlet at the nozzle / chamber manifold.',
+    specs:{ 'Fluid':'CH₄, pump discharge', 'Direction':'Pump → cooling jacket' } },
+  { id:'xfer', name:'Coolant transfer line', color:'#9aa7ba', mat:'duct', objs:['Cylinder.005_Cylinder.011'], duct:'Cylinder.005_Cylinder.011', fluid:'ch4hot',
+    desc:'Carries methane that has been warmed in the cooling jacket around the engine toward the fuel-rich preburner, where it becomes turbine drive gas.',
+    specs:{ 'Fluid':'Heated CH₄', 'Destination':'Fuel-rich preburner' } },
+  { id:'block', name:'Powerhead block & port bosses', color:'#cfd4dc', mat:'block', objs:['Cube.001_Cube.002','Cylinder.021_Cylinder.006','Cylinder.022_Cylinder.019','Cube.003','Cube.008_Cube.011','Cylinder.017_Cylinder.008','Cylinder.015_Cylinder.043'],
+    desc:'Machined manifold block at the top of the engine with radial port bosses for propellant inlets, instrumentation and valve interfaces.',
+    specs:{ 'Function':'Inlet / manifold interface', 'Ports (model)':'Radial bosses' } },
+  { id:'valves', name:'Valves, actuators & controller', color:'#6a6f78', mat:'dark', objs:['Cube','Cylinder.014_Cylinder.005','Cylinder.016_Cylinder.007','Cylinder.018_Cylinder.010','Cylinder.019_Cylinder.041','Cylinder.020_Cylinder.037','Cube.002_Cube.004','Cylinder.012_Cylinder.029','Cylinder.013_Cylinder.001'],
+    desc:'Main and preburner valves are electrically actuated on Raptor, commanded by the engine controller. They set mixture ratio and throttle (down to ~40%).',
+    specs:{ 'Actuation':'Electromechanical', 'Throttle range':'~40–100%' } },
+  { id:'tvc', name:'TVC actuator lugs', color:'#c9a35a', mat:'gold', objs:['Cube.004_Cube.005','Cube.005_Cube.007','Cube.006_Cube.008','Cube.007_Cube.009'],
+    desc:'Attach points for the electromechanical thrust-vector-control actuators that swing the engine around the gimbal. Starship uses electric TVC instead of hydraulics.',
+    specs:{ 'Actuators':'Electric (no hydraulics)', 'Range':'Up to ±15° (center engines)' } },
+  { id:'lines', name:'Small-bore lines & sensors', color:'#8e96a3', mat:'lines', objs:['Vert.001_Vert.003','Vert.002','Vert_Vert.001','Vert.003','Cylinder.008_Cylinder.016','Cylinder.009_Cylinder.024','Cylinder.006_Cylinder.025','Cylinder.010_Cylinder.026','Cylinder.023_Cylinder.021','Cylinder.025_Cylinder.023'],
+    desc:'Igniter feeds, autogenous pressurisation take-offs (hot GOX / GCH₄ used to pressurise the tanks), purge lines and sensor taps.',
+    specs:{ 'Includes':'Igniter, pressurisation, purge, instrumentation' } },
+];
+const parts = [];
+const meshPart = new Map();
+PARTS.forEach(P=>{
+  const g = new THREE.Group(); g.name = P.id; g.userData = P; body.add(g); parts.push(g); P.group = g;
+  const box = new THREE.Box3();
+  P.objs.forEach(n=>{
+    const m = meshes[n]; if (!m) return;
+    if (!m.parent) { m.material = MAT[P.mat]; g.add(m); meshPart.set(m, []); }
+    meshPart.get(m).push(P);
+    box.union(m.geometry.boundingBox);
+  });
+  if (P.yr) { box.min.y = Math.max(box.min.y, P.yr[0]); box.max.y = Math.min(box.max.y, P.yr[1]); }
+  const c = box.getCenter(V3()), hz = V3(c.x,0,c.z);
+  P.center = c;
+  P.anchor = hz.length()>0.05 ? c.clone().add(hz.clone().normalize().multiplyScalar(0.25)) : V3(Math.max(box.max.x, 0.4)+0.05, c.y, 0);
+  P.explodeDir = hz.length()>0.05 ? hz.normalize().multiplyScalar(1.3).add(V3(0,(c.y-0.6)*0.35,0)) : V3(0, (c.y-0.6)*0.55, 0);
+  if (P.yr) P.explodeDir.set(0,0,0);   // regions of the one-piece main shell stay put
+});
+// any unassigned object → valves group (so nothing is lost)
+Object.values(meshes).forEach(m=>{ if(!m.parent){ m.material=MAT.dark; PARTS[9].group.add(m); meshPart.set(m,[PARTS[9]]); } });
+const partOfHit = (mesh, point) => {
+  const list = meshPart.get(mesh); if (!list) return null;
+  if (list.length===1) return list[0];
+  const y = body.worldToLocal(point.clone()).y;
+  return list.find(P=>!P.yr || (y>=P.yr[0] && y<P.yr[1])) || list[0];
+};
+parts.forEach(g=>g.userData.base = g.position.clone());
+const allMeshes = Object.values(meshes);
+
+// =====================================================================
+//  PROPELLANT FLOW (X-ray): animated fluid on the inside of the actual
+//  ducts / manifolds / cooling jacket, parameterised along each passage
+// =====================================================================
+const flowMats = [];
+function flowMaterial(c1, c2, gate, speed, mode, extra={}) {
+  const m = new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending,
+    uniforms:{ uPhase:{value:Math.random()*10}, uRate:{value:0}, uC1:{value:new THREE.Color(c1)}, uC2:{value:new THREE.Color(c2)},
+               uMode:{value:mode}, uY0:{value:extra.y0??0}, uY1:{value:extra.y1??1}, uRmax:{value:extra.rmax??9}, uLen:{value:extra.len??1}, uInset:{value:extra.inset??0.006} },
+    vertexShader:`attribute float aS; uniform float uInset; varying float vS; varying vec3 vOP; varying vec3 vN, vV;
+      void main(){ vS=aS; vOP=position; vec3 p=position-normal*uInset; vec4 mv=modelViewMatrix*vec4(p,1.);
+        vN=normalize(normalMatrix*normal); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }`,
+    fragmentShader:`uniform float uPhase,uRate,uMode,uY0,uY1,uRmax,uLen; uniform vec3 uC1,uC2; varying float vS; varying vec3 vOP,vN,vV;
+      ${NOISE_GLSL}
+      void main(){
+        float s = vS;
+        if (uMode>0.5 && uMode<1.5){ if(vOP.y<uY0||vOP.y>uY1||length(vOP.xz)>uRmax) discard; s=(vOP.y-uY0)/(uY1-uY0); }    // vertical passage (upflow)
+        if (uMode>1.5 && uMode<2.5){ if(vOP.y<uY0||vOP.y>uY1||length(vOP.xz)>uRmax) discard; s=(uY1-vOP.y)/(uY1-uY0); }    // vertical passage (downflow)
+        if (uMode>2.5) { s = atan(vOP.z, vOP.x)/6.2831853+.5; }                                                               // ring manifold
+        float around = atan(vOP.z-0.0, vOP.x)*1.5 + vOP.y*3.;
+        vec3 q = vec3(s*uLen*9. - uPhase, around*2., 0.);
+        float turb = fbm3(q) ;
+        float streak = smoothstep(.38,.8,turb);
+        float on = clamp(uRate*1.3+.08, 0., 1.);
+        float fres = pow(1.-abs(dot(normalize(vN),normalize(vV))), 2.);
+        vec3 col = mix(uC1, uC2, clamp(s,0.,1.));
+        vec3 c = col*(.06+.55*streak)*on + col*fres*.25*on;
+        gl_FragColor = vec4(c, 1.);
+      }`
+  });
+  m.userData = { gate, speed }; flowMats.push(m); return m;
+}
+const flowGroup = new THREE.Group(); body.add(flowGroup); flowGroup.visible = false;
+// Parameterise a duct mesh along its smoothed centre-line (extracted from the model's own vertices)
+function ductParam(mesh, pts) {
+  const sm = pts.map((p,i)=>{ const a=pts[Math.max(0,i-1)], b=pts[Math.min(pts.length-1,i+1)]; return V3((a[0]+2*p[0]+b[0])/4,(a[1]+2*p[1]+b[1])/4,(a[2]+2*p[2]+b[2])/4); });
+  const c = new THREE.CatmullRomCurve3(sm), S = c.getSpacedPoints(240);
+  const pos = mesh.geometry.attributes.position, aS = new Float32Array(pos.count), v = V3();
+  for (let i=0;i<pos.count;i++){ v.fromBufferAttribute(pos,i); let best=1e9, bi=0; for (let k=0;k<S.length;k++){ const d=v.distanceToSquared(S[k]); if(d<best){best=d;bi=k;} } aS[i]=bi/(S.length-1); }
+  mesh.geometry.setAttribute('aS', new THREE.BufferAttribute(aS,1));
+  return c.getLength();
+}
+function addFlow(meshName, mat) { const src = meshes[meshName]; if (!src) return; const g = src.geometry; if (!g.attributes.aS) g.setAttribute('aS', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count),1));
+  const o = new THREE.Mesh(g, mat); o.renderOrder = 8; flowGroup.add(o); return o; }
+const DUCTS = window.RAPTOR_DUCTS || {};
+const LOX = 0x5fb0ff, LOX2 = 0xc8e8ff, CH4 = 0xffb03a, CH4H = 0xff6a22, OXG = 0x9fd0ff, FRG = 0xff7a3a;
+// coolant duct: pump → cooling inlet (top → bottom)
+if (DUCTS['Cylinder.007_Cylinder.020']) { const L=ductParam(meshes['Cylinder.007_Cylinder.020'], DUCTS['Cylinder.007_Cylinder.020'].pts); addFlow('Cylinder.007_Cylinder.020', flowMaterial(CH4, CH4, 'main', 1.4, 0, { len:L, inset:0.012 })); }
+if (DUCTS['Cylinder.005_Cylinder.011']) { const L=ductParam(meshes['Cylinder.005_Cylinder.011'], DUCTS['Cylinder.005_Cylinder.011'].pts); addFlow('Cylinder.005_Cylinder.011', flowMaterial(CH4H, CH4, 'main', 1.4, 0, { len:L, inset:0.012 })); }
+['Vert.001_Vert.003','Vert.002','Vert_Vert.001','Vert.003'].forEach((n,k)=>{ if (DUCTS[n]) { const L=ductParam(meshes[n], DUCTS[n].pts); addFlow(n, flowMaterial(k%2?LOX:CH4, k%2?LOX2:CH4H, 'pb', 2, 0, { len:L, inset:0.004 })); } });
+// preburner + turbine: hot drive gas flows downward through the stack
+addFlow('Cylinder.003_Cylinder.013', flowMaterial(0xffe0a0, FRG, 'pb', 2.2, 2, { y0:1.0, y1:1.9, len:1, inset:0.02 }));
+addFlow('Cylinder.002_Cylinder.003', flowMaterial(FRG, CH4, 'pb', 2.2, 2, { y0:0.2, y1:1.0, len:1, inset:0.02 }));
+// manifold rings: circumferential flow
+['Torus','Torus.002','Torus.006','Torus.007'].forEach(n=>addFlow(n, flowMaterial(CH4, CH4H, 'main', 0.7, 3, { len:3, inset:0.01 })));
+// regenerative cooling jacket: CH4 climbs the nozzle & chamber walls, heating up
+addFlow('Cylinder', flowMaterial(CH4, CH4H, 'main', 0.9, 1, { y0:-0.72, y1:0.92, rmax:1.3, len:2, inset:0.02 }));
+// oxidiser down the spine into the injector (LOX inlet → ox-rich hot gas)
+addFlow('Cylinder', flowMaterial(LOX2, OXG, 'main', 1.1, 2, { y0:0.95, y1:2.75, rmax:0.36, len:2, inset:0.03 }));
+
+// =====================================================================
+//  CFD — 2-D axisymmetric Euler (MUSCL-HLL-RK2) on the model's contour
+// =====================================================================
+const NS = 500;
+const areaRatio = M => (1/M)*Math.pow((2/(GAM+1))*(1+(GAM-1)/2*M*M), (GAM+1)/(2*(GAM-1)));
+function machFromArea(ar, sup){ let lo=sup?1:1e-4, hi=sup?50:1; for (let i=0;i<60;i++){ const m=(lo+hi)/2, f=areaRatio(m)-ar; if (sup?f>0:f<0) hi=m; else lo=m; } return (lo+hi)/2; }
+const TAB = (()=>{ const tab=[]; for (let i=0;i<=NS;i++){ const y=Y_TOP+(EXIT_Y-Y_TOP)*i/NS, r=wallR(y), ar=Math.max(1.0001,(r/R_THROAT)**2);
+  const M = Math.abs(y-THROAT_Y)<4e-3 ? 1 : machFromArea(ar, y<THROAT_Y); const tr=1+(GAM-1)/2*M*M, T=T0/tr;
+  tab.push({ y, r, ar, M, T, Pr:Math.pow(tr,-GAM/(GAM-1)), V:M*Math.sqrt(GAM*RGAS*T) }); } return tab; })();
+const GAMMA_F = Math.sqrt(GAM)*Math.pow(2/(GAM+1),(GAM+1)/(2*(GAM-1)));
+let nozzle = {};
+function nozzleState(){
+  const ex=TAB[NS], P0e=P0*Math.max(0.4,+$('throttle').value), alt=+$('alt').value, Pa=1.01325*Math.exp(-alt/8.5);
+  const Pe=ex.Pr*P0e, ratio=Pe/Math.max(Pa,1e-6);
+  const isp=(ex.V+(Pe-Pa)*1e5*ex.ar*Math.sqrt(RGAS*T0)/(P0e*1e5*GAMMA_F))/9.80665;
+  return nozzle = { ex, P0e, Pa, Pe, ratio, isp, alt, lam: ex.r*1.6*Math.sqrt(ex.M*ex.M-1) };
+}
+const CFD_WORKER = `
+const G=${GAM}, GM1=G-1, PAD=2, TAMB=300/${T0}, VF=${Math.sqrt(GAM*RGAS*T0)}/Math.sqrt(G), T0K=${T0};
+let nx,nr,dx,yTop,exitY,CY,CR, solid, SP, U, U1, L, W, NW, rho_a, p_a=0.01, P0e=350, field='T', running=false, it=0, res=0, inl;
+function wallR(y){ if(y>=CY[0]) return CR[0]; for(let k=1;k<CY.length;k++){ if(y<=CY[k-1]&&y>=CY[k]){ const t=(y-CY[k-1])/(CY[k]-CY[k-1]); const s=t*t*(3-2*t)*0.3+t*0.7; return CR[k-1]+(CR[k]-CR[k-1])*s; } } return CR[CR.length-1]; }
+function lookT(tb,y){ const n=tb.y.length-1; let k=Math.round((y-tb.y[0])/(tb.y[n]-tb.y[0])*n); return Math.max(0,Math.min(n,k)); }
+function setU(A,c,rho,u,v,p){ const b=c*4; A[b]=rho; A[b+1]=rho*u; A[b+2]=rho*v; A[b+3]=p/GM1+0.5*rho*(u*u+v*v); }
+function init(m){
+  CY=m.cy; CR=m.cr; exitY=m.exitY; yTop=m.yTop; dx=m.dx;
+  nx=Math.ceil((yTop-(exitY-m.plumeL))/dx); nr=Math.ceil(m.Rmax/dx);
+  solid=new Uint8Array(nx*nr); U=new Float64Array(nx*nr*4); U1=new Float64Array(nx*nr*4); L=new Float64Array(nx*nr*4);
+  NW=nr+2*PAD; W=new Float64Array((nx+2*PAD)*NW*4);
+  p_a=Math.max(m.pa,1e-7); P0e=m.P0e; rho_a=p_a/TAMB;
+  const thk=Math.max(0.08,2.2*dx), tb=m.tab, ex=tb.y.length-1, re=wallR(exitY);
+  for(let i=0;i<nx;i++){ const y=yTop-(i+.5)*dx, wr=wallR(y);
+    for(let j=0;j<nr;j++){ const r=(j+.5)*dx, c=i*nr+j; let rho,u,p;
+      if (y>exitY && r>=wr && r<wr+thk){ solid[c]=1; rho=rho_a; u=0; p=p_a; }
+      else if (y>exitY && r<wr){ const k=lookT(tb,y); p=tb.P[k]; rho=p/tb.T[k]; u=tb.M[k]*Math.sqrt(G*tb.T[k]); }
+      else if (y<=exitY && r<re*(1+0.02*(exitY-y))){ p=tb.P[ex]; rho=p/tb.T[ex]; u=tb.M[ex]*Math.sqrt(G*tb.T[ex]); }
+      else { rho=rho_a; u=0; p=p_a; }
+      setU(U,c,rho,u,0,p); } }
+  SP=new Uint8Array((nx+2*PAD)*NW); for(let i=0;i<nx;i++) for(let j=0;j<nr;j++) SP[(i+PAD)*NW+j+PAD]=solid[i*nr+j];
+  const k0=lookT(tb,yTop); inl={ p:tb.P[k0], rho:tb.P[k0]/tb.T[k0], u:tb.M[k0]*Math.sqrt(G*tb.T[k0]) };
+  it=0; postMessage({ type:'grid', nx, nr, dx, yTop });
+}
+function wi(i,j){ return ((i+PAD)*NW+(j+PAD))*4; }
+function prims(A){
+  for(let i=0;i<nx;i++) for(let j=0;j<nr;j++){ const b=(i*nr+j)*4, w=wi(i,j);
+    const rho=Math.max(A[b],1e-7), u=A[b+1]/rho, v=A[b+2]/rho, p=Math.max(GM1*(A[b+3]-0.5*rho*(u*u+v*v)),1e-9);
+    W[w]=rho; W[w+1]=u; W[w+2]=v; W[w+3]=p; }
+  const wrTop=wallR(yTop);
+  for(let j=0;j<nr;j++){ const r=(j+.5)*dx;
+    for(let g=1;g<=PAD;g++){ const w=wi(-g,j);
+      if (r<wrTop){ W[w]=inl.rho; W[w+1]=inl.u; W[w+2]=0; W[w+3]=inl.p; } else { W[w]=rho_a; W[w+1]=0; W[w+2]=0; W[w+3]=p_a; }
+      const s=wi(nx-1,j), d=wi(nx-1+g,j); W[d]=W[s]; W[d+1]=Math.max(W[s+1],0); W[d+2]=W[s+2]; W[d+3]=W[s+3]; } }
+  for(let i=-PAD;i<nx+PAD;i++) for(let g=1;g<=PAD;g++){
+    const s=wi(i,g-1), d=wi(i,-g); W[d]=W[s]; W[d+1]=W[s+1]; W[d+2]=-W[s+2]; W[d+3]=W[s+3];
+    const s2=wi(i,nr-1), d2=wi(i,nr-1+g); W[d2]=rho_a; W[d2+1]=W[s2+1]; W[d2+2]=W[s2+2]; W[d2+3]=p_a; }
+}
+function isSolid(i,j){ return SP[(i+PAD)*NW+j+PAD]===1; }
+function mm(a,b){ return a*b<=0?0:(Math.abs(a)<Math.abs(b)?a:b); }
+const FL=new Float64Array(4), WL=new Float64Array(4), WR=new Float64Array(4);
+function hll(rL,un,ut,pL, rR,unR,utR,pR, out){
+  const aL=Math.sqrt(G*pL/rL), aR=Math.sqrt(G*pR/rR);
+  const EL=pL/GM1+0.5*rL*(un*un+ut*ut), ER=pR/GM1+0.5*rR*(unR*unR+utR*utR);
+  const SL=Math.min(un-aL,unR-aR), SR=Math.max(un+aL,unR+aR);
+  const f0L=rL*un, f1L=rL*un*un+pL, f2L=rL*un*ut, f3L=un*(EL+pL);
+  const f0R=rR*unR, f1R=rR*unR*unR+pR, f2R=rR*unR*utR, f3R=unR*(ER+pR);
+  if (SL>=0){ out[0]=f0L; out[1]=f1L; out[2]=f2L; out[3]=f3L; return; }
+  if (SR<=0){ out[0]=f0R; out[1]=f1R; out[2]=f2R; out[3]=f3R; return; }
+  const k=1/(SR-SL), q=SL*SR;
+  out[0]=(SR*f0L-SL*f0R+q*(rR-rL))*k; out[1]=(SR*f1L-SL*f1R+q*(rR*unR-rL*un))*k;
+  out[2]=(SR*f2L-SL*f2R+q*(rR*utR-rL*ut))*k; out[3]=(SR*f3L-SL*f3R+q*(ER-EL))*k;
+}
+function recon(i,j,di,dj,side,out){
+  const c=wi(i,j), m=wi(i-di,j-dj), pl=wi(i+di,j+dj), lim=isSolid(i-di,j-dj)||isSolid(i+di,j+dj);
+  for(let q=0;q<4;q++){ const s=lim?0:mm(W[c+q]-W[m+q], W[pl+q]-W[c+q]); out[q]=W[c+q]+0.5*side*s; }
+  if (out[0]<=0||out[3]<=0){ for(let q=0;q<4;q++) out[q]=W[c+q]; }
+}
+function rhs(A){
+  prims(A); L.fill(0); const idx2=1/dx;
+  for(let i=-1;i<nx;i++) for(let j=0;j<nr;j++){
+    const sL=isSolid(i,j), sR=isSolid(i+1,j); if(sL&&sR) continue;
+    if (sL||sR){ const w=wi(sL?i+1:i,j); FL[0]=0; FL[1]=W[w+3]; FL[2]=0; FL[3]=0; }
+    else { recon(i,j,1,0,1,WL); recon(i+1,j,1,0,-1,WR); hll(WL[0],WL[1],WL[2],WL[3], WR[0],WR[1],WR[2],WR[3], FL); }
+    if (i>=0&&!sL){ const b=(i*nr+j)*4; L[b]-=FL[0]*idx2; L[b+1]-=FL[1]*idx2; L[b+2]-=FL[2]*idx2; L[b+3]-=FL[3]*idx2; }
+    if (i+1<nx&&!sR){ const b=((i+1)*nr+j)*4; L[b]+=FL[0]*idx2; L[b+1]+=FL[1]*idx2; L[b+2]+=FL[2]*idx2; L[b+3]+=FL[3]*idx2; }
+  }
+  for(let i=0;i<nx;i++) for(let j=0;j<nr;j++){
+    const sL=isSolid(i,j), sR=isSolid(i,j+1); if(sL&&sR) continue;
+    if (sL||sR){ const w=wi(i,sL?j+1:j); FL[0]=0; FL[1]=0; FL[2]=W[w+3]; FL[3]=0; }
+    else { recon(i,j,0,1,1,WL); recon(i,j+1,0,1,-1,WR); hll(WL[0],WL[2],WL[1],WL[3], WR[0],WR[2],WR[1],WR[3], FL); const t=FL[1]; FL[1]=FL[2]; FL[2]=t; }
+    const rf=(j+1)*dx;
+    if (!sL){ const b=(i*nr+j)*4, k=rf/((j+.5)*dx*dx); L[b]-=FL[0]*k; L[b+1]-=FL[1]*k; L[b+2]-=FL[2]*k; L[b+3]-=FL[3]*k; }
+    if (j+1<nr&&!sR){ const b=(i*nr+j+1)*4, k=rf/((j+1.5)*dx*dx); L[b]+=FL[0]*k; L[b+1]+=FL[1]*k; L[b+2]+=FL[2]*k; L[b+3]+=FL[3]*k; }
+  }
+  for(let i=0;i<nx;i++) for(let j=0;j<nr;j++){ if(solid[i*nr+j]) continue; L[(i*nr+j)*4+2]+=W[wi(i,j)+3]/((j+.5)*dx); }
+}
+function maxDt(){ let s=1e-9; for(let i=0;i<nx;i++) for(let j=0;j<nr;j++){ if(solid[i*nr+j]) continue; const w=wi(i,j), a=Math.sqrt(G*W[w+3]/W[w]); s=Math.max(s,Math.abs(W[w+1])+a,Math.abs(W[w+2])+a); } return 0.4*dx/s; }
+function step(){
+  prims(U); const dt=maxDt();
+  rhs(U); for(let k=0;k<U.length;k++) U1[k]=U[k]+dt*L[k];
+  rhs(U1); let r=0;
+  for(let c=0;c<nx*nr;c++){ if(solid[c]) continue; const b=c*4;
+    for(let q=0;q<4;q++){ const nv=0.5*U[b+q]+0.5*(U1[b+q]+dt*L[b+q]); if(q===0) r+=Math.abs(nv-U[b]); U[b+q]=nv; }
+    if (U[b]<1e-7) U[b]=1e-7; }
+  res=r/(nx*nr*dt); it++;
+}
+function turbo(t){ t=Math.min(1,Math.max(0,t));
+  return [0.1357+t*(4.5974-t*(42.3277-t*(130.5887-t*(150.5666-t*58.1375)))), 0.0914+t*(2.1856+t*(4.8052-t*(14.0195-t*(4.2109+t*2.7747)))), 0.1067+t*(12.5925-t*(60.1097-t*(109.0745-t*(88.5066-t*26.8183))))]; }
+function frame(){
+  prims(U);
+  const img=new Uint8Array(2*nr*nx*4), cM=new Float32Array(nx), cT=new Float32Array(nx), cP=new Float32Array(nx), cV=new Float32Array(nx);
+  let gmax=1e-9; const grad=new Float32Array(nx*nr);
+  if (field==='S'){ for(let i=0;i<nx;i++) for(let j=0;j<nr;j++){ const gx=W[wi(i+1,j)]-W[wi(i-1,j)], gr=W[wi(i,j+1)]-W[wi(i,j-1)]; const g=Math.sqrt(gx*gx+gr*gr)/(2*dx)/(W[wi(i,j)]+0.02); grad[i*nr+j]=g; if(!solid[i*nr+j]) gmax=Math.max(gmax,g); } }
+  const lg=Math.log(1+gmax*40);
+  for(let i=0;i<nx;i++){ const row=nx-1-i;
+    for(let j=0;j<nr;j++){ const c=i*nr+j, w=wi(i,j), rho=W[w], u=W[w+1], v=W[w+2], p=W[w+3];
+      const T=p/rho, a=Math.sqrt(G*T), sp=Math.sqrt(u*u+v*v);
+      if (j===0){ cM[i]=sp/a; cT[i]=T; cP[i]=p; cV[i]=sp*VF; }
+      let col, al=255;
+      if (solid[c]) col=[0.2,0.21,0.24];
+      else if (field==='S'){ const g=1-Math.min(1,Math.log(1+grad[c]*40)/lg*1.3); col=[g*.92,g*.95,g]; }
+      else { let val; if (field==='T') val=(T*T0K-300)/(T0K-300); else if (field==='M') val=sp/a/5; else if (field==='V') val=sp*VF/4000; else val=(Math.log10(p*P0e)+3)/5.6;
+        col=turbo(val); const jet=Math.max(Math.min(1,sp*VF/500), Math.min(1,(T*T0K-330)/600)); al=Math.round(255*Math.min(1,jet*1.2)); }
+      const k1=(row*2*nr+(nr+j))*4, k2=(row*2*nr+(nr-1-j))*4;
+      img[k1]=img[k2]=Math.max(0,Math.min(255,col[0]*235)); img[k1+1]=img[k2+1]=Math.max(0,Math.min(255,col[1]*235));
+      img[k1+2]=img[k2+2]=Math.max(0,Math.min(255,col[2]*235)); img[k1+3]=img[k2+3]=al; } }
+  postMessage({ type:'frame', img, cM, cT, cP, cV, it, res }, [img.buffer, cM.buffer, cT.buffer, cP.buffer, cV.buffer]);
+}
+function loop(){ if (!running) return; const t0=performance.now(); while(performance.now()-t0<40) step(); frame(); setTimeout(loop,0); }
+onmessage=e=>{ const m=e.data;
+  if (m.type==='init') init(m);
+  else if (m.type==='params'){ p_a=Math.max(m.pa,1e-7); P0e=m.P0e; rho_a=p_a/TAMB; }
+  else if (m.type==='field'){ field=m.field; if(!running && U) frame(); }
+  else if (m.type==='run'){ const was=running; running=m.on; if(running&&!was) loop(); }
+};`;
+const cfd = new Worker(URL.createObjectURL(new Blob([CFD_WORKER], { type:'text/javascript' })));
+let cfdGrid=null, cfdPlane=null, cfdTex=null, cfdLast=null, cfdInited=false, fieldMode='T';
+function cfdInit(){
+  nozzleState();
+  const cy=[], cr=[]; for (let i=0;i<=200;i++){ const y=Y_TOP+(EXIT_Y-Y_TOP)*i/200; cy.push(y); cr.push(wallR(y)); }
+  cfd.postMessage({ type:'init', exitY:EXIT_Y, yTop:Y_TOP, dx:0.03, plumeL:6.5, Rmax:2.4, cy, cr,
+    tab:{ y:TAB.map(s=>s.y), M:TAB.map(s=>s.M), T:TAB.map(s=>s.T/T0), P:TAB.map(s=>s.Pr) }, pa:nozzle.Pa/nozzle.P0e, P0e:nozzle.P0e });
+  cfd.postMessage({ type:'field', field:fieldMode }); cfdInited = true;
+}
+cfd.onmessage = e => { const m=e.data;
+  if (m.type==='grid'){ cfdGrid=m; if (cfdPlane){ body.remove(cfdPlane); cfdPlane.geometry.dispose(); cfdTex.dispose(); }
+    cfdTex = new THREE.DataTexture(new Uint8Array(2*m.nr*m.nx*4), 2*m.nr, m.nx, THREE.RGBAFormat);
+    cfdTex.magFilter = cfdTex.minFilter = THREE.LinearFilter; cfdTex.colorSpace = THREE.SRGBColorSpace;
+    cfdPlane = new THREE.Mesh(new THREE.PlaneGeometry(2*m.nr*m.dx, m.nx*m.dx), new THREE.MeshBasicMaterial({ map:cfdTex, side:THREE.DoubleSide, toneMapped:false, transparent:true, depthWrite:false }));
+    cfdPlane.position.set(0, m.yTop - m.nx*m.dx/2, -0.004); cfdPlane.renderOrder = 3; body.add(cfdPlane); }
+  else if (m.type==='frame' && cfdTex){ cfdTex.image.data.set(m.img); cfdTex.needsUpdate = true; cfdLast = m; }
+};
+const plot=$('plot'), pctx=plot.getContext('2d');
+function turbo(t){ t=Math.min(1,Math.max(0,t));
+  return [0.1357+t*(4.5974-t*(42.3277-t*(130.5887-t*(150.5666-t*58.1375)))), 0.0914+t*(2.1856+t*(4.8052-t*(14.0195-t*(4.2109+t*2.7747)))), 0.1067+t*(12.5925-t*(60.1097-t*(109.0745-t*(88.5066-t*26.8183))))]; }
+function drawSimPanel(){
+  const { ex, Pe, Pa, ratio, isp } = nozzle, W=plot.width, H=plot.height, pad=28;
+  pctx.clearRect(0,0,W,H); pctx.font='20px system-ui'; pctx.lineWidth=3;
+  const rg=$('regime');
+  if (Pe<0.4*Pa) { rg.textContent='⚠ Flow separation risk'; rg.style.color='#ff5b5b'; }
+  else if (ratio<0.9) { rg.textContent='Over-expanded · shock diamonds'; rg.style.color='#ffb35a'; }
+  else if (ratio>1.1) { rg.textContent='Under-expanded · plume widens'; rg.style.color='#7fc8ff'; }
+  else { rg.textContent='Near-ideally expanded'; rg.style.color='#7ee08a'; }
+  const legend={ T:['300 K',T0+' K'], M:['0','Mach 5'], V:['0 m/s','4000 m/s'], P:['0.001 bar','400 bar'], S:['low |∇ρ|','shocks / shear layers'] }[fieldMode];
+  $('lmin').textContent=legend[0]; $('lmax').textContent=legend[1];
+  $('lbar').style.background = fieldMode==='S' ? 'linear-gradient(90deg,#eef2f5,#111)' : `linear-gradient(90deg,${[0,.2,.4,.6,.8,1].map(v=>`rgb(${turbo(v).map(x=>Math.round(Math.min(1,Math.max(0,x))*255))})`).join(',')})`;
+  if (!cfdLast||!cfdGrid){ $('cfdstat').textContent='initialising solver…'; return; }
+  const { cM, cT, cP, cV, it, res } = cfdLast, n=cM.length, dxg=cfdGrid.dx;
+  const iExit=Math.round((Y_TOP-EXIT_Y)/dxg), iThr=Math.round((Y_TOP-THROAT_Y)/dxg);
+  const X=i=>pad+(W-2*pad)*i/(n-1), Yv=v=>H-pad-(H-2*pad)*Math.min(1,Math.max(0,v));
+  pctx.fillStyle='#121a26'; pctx.fillRect(X(iExit),pad,W-pad-X(iExit),H-2*pad);
+  [[iThr,'throat'],[iExit,'exit']].forEach(([i,l])=>{ pctx.strokeStyle='#3a4a63'; pctx.setLineDash([6,6]); pctx.beginPath(); pctx.moveTo(X(i),pad); pctx.lineTo(X(i),H-pad); pctx.stroke(); pctx.setLineDash([]); pctx.fillStyle='#8a97ab'; pctx.fillText(l,X(i)+6,H-6); });
+  [['Mach (axis)','#4fb3ff',i=>cM[i]/5],['T/T₀','#ff8a3d',i=>cT[i]],['log P','#7ee08a',i=>(Math.log10(Math.max(cP[i],1e-7))+5)/5]].forEach(([nm,c,f],k)=>{
+    pctx.strokeStyle=c; pctx.beginPath(); for(let i=0;i<n;i++){ const y=Yv(f(i)); i?pctx.lineTo(X(i),y):pctx.moveTo(X(i),y); } pctx.stroke(); pctx.fillStyle=c; pctx.fillText(nm,pad+8+k*150,22); });
+  pctx.fillStyle='#8a97ab'; pctx.fillText('injector',pad,H-6); pctx.fillText('plume →',W-pad-80,H-6);
+  const ie=Math.min(n-1,Math.max(0,iExit-1));
+  $('sMe').textContent=cM[ie].toFixed(2); $('sVe').textContent=Math.round(cV[ie])+' m/s'; $('sTe').textContent=Math.round(cT[ie]*T0)+' K';
+  $('sPe').textContent=(cP[ie]*nozzle.P0e).toFixed(2)+' bar'; $('sPa').textContent=Pa.toFixed(3)+' bar'; $('sIsp').textContent=Math.round(isp)+' s';
+  $('cfdstat').textContent=`2-D axisymmetric Euler · ${cfdGrid.nx}×${cfdGrid.nr} cells · iter ${it} · residual ${res.toExponential(2)}`;
+}
+
+// =====================================================================
+//  EXHAUST PLUME — ray-marched, methalox colours (clean, no soot)
+// =====================================================================
+const plumeMat = new THREE.ShaderMaterial({
+  transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.FrontSide,
+  uniforms:{ uCam:{value:V3()}, uTime:{value:0}, uPower:{value:0}, uR0:{value:R_EXIT}, uLen:{value:10}, uRmax:{value:R_EXIT*4.6},
+             uRatio:{value:1}, uLam:{value:2}, uAir:{value:1}, uTorch:{value:0} },
+  vertexShader:`varying vec3 vPos; void main(){ vPos=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader:`
+    uniform vec3 uCam; uniform float uTime,uPower,uR0,uLen,uRmax,uRatio,uLam,uAir,uTorch; varying vec3 vPos;
+    ${NOISE_GLSL}
+    // Turbulence advected downstream with domain warping (no geometric patterns)
+    float turbAt(vec3 p){
+      vec3 q = vec3(p.x, p.y + uTime*16., p.z) / uR0;
+      vec3 w = vec3(n3(q*.55 + vec3(0.,uTime*.9,0.)), n3(q*.55 + vec3(5.2,1.3,uTime*.6)), n3(q*.55 + vec3(9.1,4.7,2.3)));
+      return fbm3(q*1.25 + (w-.5)*2.6);
+    }
+    // methalox emission ramp: violet → magenta → orange → peach → white-hot
+    vec3 ramp(float x){
+      x = clamp(x,0.,1.);
+      vec3 c = mix(vec3(.16,.09,.42), vec3(.72,.24,.55), smoothstep(0.,.22,x));
+      c = mix(c, vec3(1.,.47,.2), smoothstep(.18,.5,x));
+      c = mix(c, vec3(1.,.77,.5), smoothstep(.45,.75,x));
+      return mix(c, vec3(1.,.95,.86), smoothstep(.72,1.,x));
+    }
+    void main(){
+      vec3 ro=uCam, rd=normalize(vPos-uCam); float t0=length(vPos-uCam);
+      float a=dot(rd.xz,rd.xz), b=2.*dot(ro.xz,rd.xz), c=dot(ro.xz,ro.xz)-uRmax*uRmax;
+      float disc=max(b*b-4.*a*c,0.); float tc2=(-b+sqrt(disc))/(2.*a+1e-6);
+      float ty0=(0.-ro.y)/rd.y, ty1=(-uLen-ro.y)/rd.y; float tEnd=min(a>1e-6?tc2:1e9, max(ty0,ty1));
+      if (tEnd<=t0) discard;
+      const int STEPS=80; float dt=(tEnd-t0)/float(STEPS);
+      float jit=h3(vec3(gl_FragCoord.xy, fract(uTime)*91.))*dt;
+      vec3 col=vec3(0.); float vac=1.-uAir;
+      for(int i=0;i<STEPS;i++){
+        vec3 p=ro+rd*(t0+float(i)*dt+jit); float d=-p.y; if(d<0.||d>uLen) continue;
+        float r=length(p.xz);
+        float R = mix(uR0*(1.+.05*d), min(uR0*(1.+.33*d), uR0*4.4), vac);
+        float tb = turbAt(p);
+        float tAmp = smoothstep(0., uLen*.55, d);
+        float Re = R*(1.+(tb-.5)*(.22+.95*tAmp));
+        float rn = r/Re; if (rn>1.7) continue;
+        float prof = exp(-rn*rn*2.3);
+        // soft shock-cell glow on the axis (Mach disks), weakening each cell
+        float k = floor(d/uLam), f = fract(d/uLam);
+        float lw = .17 + .06*k, dz = (f-.55)/lw;
+        float lump = exp(-dz*dz) * exp(-(r*r)/(R*R*.13)) * exp(-k*.5) * uAir;
+        float wake = smoothstep(.15, 1., d/uLam);                 // gas re-heats after the first disk
+        float heat = (.22 + .58*wake) * exp(-d/(uLen*.5)) * prof + lump*1.15;
+        heat *= .7 + .6*tb;
+        // afterburning mixing layer with air: smoky orange, thickens downstream
+        float shell = uAir * smoothstep(.3,.95,rn) * exp(-max(rn-1.,0.)*2.5) * smoothstep(0.,uLam*1.2,d) * exp(-d/(uLen*.75)) * (.25+1.3*tb);
+        vec3 e = ramp(heat)*heat*1.7 + vec3(1.,.4,.11)*shell*.5;
+        vec3 ev = vec3(.35,.42,1.)*prof*exp(-d/(uLen*.45))*.32*(.6+.6*tb) + vec3(.62,.72,1.)*exp(-d/uR0)*prof*.35;
+        e = mix(e, ev/(1.+.15*d), vac);
+        e += vec3(.45,.65,1.)*uTorch*prof*exp(-d/uR0)*2.5;
+        col += e*dt*1.35;
+      }
+      col *= uPower*(.88+.12*n3(vec3(uTime*37.,1.7,.3)));
+      col = 1.-exp(-col*1.15);
+      gl_FragColor = vec4(col, 1.);
+    }
+`
+});
+const plumeMeshes = [];
+const plumeLen = 11;
+function makePlume(parent){
+  const Rmax=R_EXIT*4.6, geo=new THREE.CylinderGeometry(Rmax,Rmax,plumeLen,48,1,false); geo.translate(0,-plumeLen/2,0);
+  const m=new THREE.Mesh(geo, plumeMat); m.frustumCulled=false; m.renderOrder=5; m.position.y = EXIT_Y-0.02;
+  const inv=new THREE.Matrix4(); m.onBeforeRender=(r,s,cam)=>{ inv.copy(m.matrixWorld).invert(); plumeMat.uniforms.uCam.value.copy(cam.position).applyMatrix4(inv); };
+  parent.add(m); plumeMeshes.push(m); return m;
+}
+makePlume(body);
+plumeMat.uniforms.uLen.value = plumeLen;
+const fireLight = new THREE.PointLight(0xff9a60, 0, 40, 1.4); fireLight.position.y = EXIT_Y-1.8; body.add(fireLight);
+const torchLight = new THREE.PointLight(0x7fa8ff, 0, 8); torchLight.position.y = 0.6; body.add(torchLight);
+// ground billow (sea level only)
+const SM=260, smokeGeo=new THREE.BufferGeometry(); smokeGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SM*3),3));
+const sprite = (()=>{ const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d'); const gr=g.createRadialGradient(32,32,0,32,32,32); gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(.45,'rgba(255,255,255,.45)'); gr.addColorStop(1,'rgba(255,255,255,0)'); g.fillStyle=gr; g.fillRect(0,0,64,64); const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; })();
+const smokeMat = new THREE.PointsMaterial({ size:2, map:sprite, color:0x7a7470, transparent:true, opacity:0, depthWrite:false });
+const smoke = new THREE.Points(smokeGeo, smokeMat); smoke.frustumCulled=false; scene.add(smoke);
+const sm = Array.from({length:SM},()=>({ p:V3(), v:V3(), life:Math.random() }));
+
+// =====================================================================
+//  LABELS
+// =====================================================================
+const labelObjs = PARTS.map(P=>{ const el=document.createElement('div'); el.className='lbl'; el.textContent=P.name; const o=new CSS2DObject(el); o.position.copy(P.anchor); P.group.add(o); o.visible=false; return o; });
+
+// =====================================================================
+//  UI
+// =====================================================================
+const list=$('parts'), info=$('info');
+let selected=null, cutOn=false, xray=false;
+PARTS.forEach(P=>{ const li=document.createElement('li'); li.innerHTML=`<span class="sw" style="background:${P.color}"></span>${P.name}`; li.onclick=()=>select(P); P.li=li; list.appendChild(li); });
+// selection highlight: outline-ish emissive tint on the part's meshes (shared one-piece shell gets a y-band highlight)
+const hiUniform = { value:new THREE.Vector2(99,99) };
+function select(P){
+  if (selected) selected.li.classList.remove('sel');
+  selected = (selected===P) ? null : P;
+  hwMats.forEach(m=>{ m.emissive.setRGB(0,0,0); });
+  allMeshes.forEach(m=>{ if(m.userData.selMat){ m.material=m.userData.baseMat; m.userData.selMat=null; } });
+  if (!selected){ info.style.display='none'; return; }
+  P.li.classList.add('sel');
+  P.objs.forEach(n=>{ const m=meshes[n]; if(!m) return; if (P.yr && n==='Cylinder') return;
+    m.userData.baseMat=m.material; const s=m.material.clone(); s.onBeforeCompile=m.material.onBeforeCompile; s.userData=m.material.userData; s.emissive=new THREE.Color(0x2a5fa8); s.emissiveIntensity=.6; m.material=s; m.userData.selMat=s; });
+  info.innerHTML=`<h2>${P.name}</h2><p>${P.desc}</p><table>${Object.entries(P.specs).map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>`;
+  info.style.display='block';
+}
+const ray=new THREE.Raycaster(), mouse=new THREE.Vector2(), tip=$('tip');
+function pick(e){
+  mouse.set(e.clientX/innerWidth*2-1, -e.clientY/innerHeight*2+1); ray.setFromCamera(mouse,camera);
+  const hits=ray.intersectObjects(allMeshes,false).filter(h=>!cutOn || clipPlane.distanceToPoint(h.point)>=0);
+  return hits.length ? partOfHit(hits[0].object, hits[0].point) : null;
+}
+let down=null;
+canvas.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
+canvas.addEventListener('pointerup',e=>{ if(down && Math.hypot(e.clientX-down[0],e.clientY-down[1])<5){ const p=pick(e); if(p) select(p); } down=null; });
+canvas.addEventListener('pointermove',e=>{ if(e.buttons){ tip.style.display='none'; return; } const p=pick(e);
+  if(p){ tip.textContent=p.name; tip.style.display='block'; tip.style.left=e.clientX+12+'px'; tip.style.top=e.clientY+12+'px'; canvas.style.cursor='pointer'; } else { tip.style.display='none'; canvas.style.cursor=''; } });
+function applyHardwareMode(){
+  hwMats.forEach(m=>{ m.clippingPlanes = cutOn?[clipPlane]:[]; m.transparent = xray; m.opacity = xray?0.13:1; m.depthWrite = !xray; m.needsUpdate=true; });
+}
+$('cut').onchange=e=>{ cutOn=e.target.checked; applyHardwareMode(); };
+$('flow').onchange=e=>{ xray=e.target.checked; flowGroup.visible=xray; applyHardwareMode(); };
+$('rot').onchange=e=>controls.autoRotate=e.target.checked;
+$('labelsOn').onchange=e=>labelObjs.forEach(o=>o.visible=e.target.checked);
+$('field').onchange=e=>{ fieldMode=e.target.value; simTick=1; cfd.postMessage({ type:'field', field:fieldMode }); };
+$('fluid').addEventListener('change',e=>{ if(e.target.checked && !cutOn){ $('cut').checked=true; cutOn=true; applyHardwareMode(); } });
+function resetView(){ camera.position.copy(HOME); controls.target.copy(HOME_T); }
+$('reset').onclick=resetView;
+
+// =====================================================================
+//  GUIDED TOUR — narrated chapters that drive the camera and the scene
+// =====================================================================
+const TOUR = [
+  { title:'Meet Raptor 3', cam:[7.5,0.8,9.5], tgt:[0,0.2,0], part:null,
+    set:{ explode:0, cut:false, flow:false, fluid:false, labels:true, alt:0, throttle:1, cycle:false, fire:false },
+    text:'Raptor is SpaceX’s methane/oxygen engine for Starship. It powers both stages of Starship. Raptor 3 makes ~280 tonnes-force at sea level from a ~3.1 m, ~1,525 kg package — a thrust-to-weight ratio around 184.',
+    why:'Raptor 3’s headline change is integration: plumbing, sensors and manifolds were folded into the structure, so the engine no longer needs a heat shield around it. That “naked” look is what you see here.' },
+  { title:'Why methane?', cam:[6,1.6,7], tgt:[0,0.6,0], part:null, set:{ labels:false },
+    text:'Liquid methane is ~6× denser than liquid hydrogen (smaller tanks) and burns far cleaner than kerosene. RP-1 leaves soot and “coking” deposits in coolant channels and turbines; methane barely does — vital for an engine meant to fly again and again.',
+    why:'Methane can also be produced on Mars from CO₂ and water ice (Sabatier reaction), which is why Starship was designed around it.' },
+  { title:'The cycle: full-flow staged combustion', cam:[7,1.2,8.5], tgt:[0,0.6,0], part:null, set:{ cycle:true },
+    text:'Raptor splits the work between two preburners. ALL the oxygen goes through an oxygen-rich preburner with a little methane; ALL the methane goes through a fuel-rich preburner with a little oxygen. Each hot gas stream spins its own turbine (driving its own pump), then both streams enter the main chamber as gases.',
+    why:'Because the entire propellant flow drives the turbines, each turbine can run cooler for the same power — enabling the record ~350 bar chamber pressure — and nothing is dumped overboard (Merlin’s gas generator throws away ~3% of its propellant).' },
+  { title:'Turbopump & preburner', cam:[2.6,1.8,-4.6], tgt:[0.1,1.0,-0.75], part:'preburner', set:{ cycle:false },
+    text:'Here the preburner (top) feeds hot, high-pressure gas into the turbine that sits on the same shaft as the pump below. Pump discharge pressures exceed 500 bar — far above the 350 bar chamber — so propellant can be pushed through the cooling jacket, preburner and injector.',
+    why:'The oxygen-rich side is the hardest engineering problem in the engine: hot gaseous oxygen at hundreds of bar burns most metals, so SpaceX developed its own superalloy (SX500). This model shows one pump/preburner stack; real Raptor has one for each propellant.' },
+  { title:'Turbopump housing', cam:[2.4,0.8,-4.2], tgt:[0.05,0.6,-0.75], part:'turbopump', set:{},
+    text:'The pump section raises the propellant from tank pressure (a few bar) to well over 500 bar. An inducer at the inlet prevents cavitation, then centrifugal impellers do the heavy lifting.',
+    why:'Turbopump power on Raptor is on the order of tens of megawatts — in a housing you could hug.' },
+  { title:'Regenerative cooling', cam:[5.5,0.2,6.5], tgt:[0,-0.4,0], part:'coolduct', set:{ flow:true },
+    text:'X-ray view on. Methane from the fuel pump runs down the coolant supply duct to manifolds on the nozzle, then flows up through hundreds of channels in the nozzle and chamber walls. It absorbs heat (warming as it climbs — amber → orange here) before heading to the fuel-rich preburner.',
+    why:'Without this, the ~3,500 K gas would melt the copper liner in milliseconds. The heat isn’t wasted: it goes back into the propellant. The straw/bronze/blue bands on the nozzle are temper colours from that heat.' },
+  { title:'Powerhead & main injector', cam:[3.8,2.4,4.2], tgt:[0,1.4,0], part:'powerhead', set:{ flow:true },
+    text:'Oxygen-rich hot gas comes down the spine (blue in X-ray) and meets fuel-rich hot gas at the main injector. Because both arrive as gases, they mix and burn almost instantly and very completely — gas-gas combustion.',
+    why:'Gas-gas injection is a big reason full-flow engines are efficient and resistant to combustion instability, which plagued many liquid-injection engines.' },
+  { title:'Combustion chamber & throat', cam:[3.2,0.7,4.2], tgt:[0,0.45,0], part:'chamber', set:{ flow:false },
+    text:'Inside: ~350 bar and ~3,550 K. The chamber narrows to the throat, where the flow speeds up to exactly Mach 1 — it is “choked”. The throat area and chamber pressure together set how much propellant flows each second.',
+    why:'Heat flux peaks at the throat (tens of MW/m²). This is the part of the engine that limits how hard it can be pushed.' },
+  { title:'The nozzle', cam:[5.2,-1.2,6.5], tgt:[0,-1.4,0], part:'nozzle', set:{},
+    text:'Past the throat the bell widens and the supersonic gas accelerates further, trading pressure and temperature for speed: from Mach 1 to ~Mach 3.9 at the exit and ~3,200 m/s.',
+    why:'Area ratio is a compromise: a bigger bell gives more efficiency in vacuum but at sea level the exhaust would be over-expanded and could separate from the wall. That’s why the Ship carries separate Raptor Vacuum engines with much larger nozzles.' },
+  { title:'CFD: what you are looking at', cam:[0.4,-1.6,9.5], tgt:[0,-2.6,0], part:null, set:{ fluid:true, cut:true, field:'M', fire:true },
+    text:'This is a live computational-fluid-dynamics solution: the 2-D axisymmetric Euler equations solved on ~26,000 cells along Raptor’s real inner contour (taken from the model). Colours show Mach number in a slice through the engine. The graph below plots values along the centre-line.',
+    why:'Watch it settle: the flow is subsonic (dark blue) in the chamber, crosses Mach 1 at the throat, and leaves the nozzle near Mach 3.9 — the solver gets Isp ≈ 328 s vs ~327 s quoted for real Raptor.' },
+  { title:'Shock diamonds', cam:[0.4,-3.2,10.5], tgt:[0,-4.2,0], part:null, set:{ fluid:true, cut:true, field:'S', fire:true },
+    text:'Schlieren view (density gradients, like a wind-tunnel photo). When exit pressure ≠ ambient pressure, the jet boundary bends and shock waves bounce across it, forming repeating cells. Where shocks cross the axis they form near-normal “Mach disks” — the bright diamonds you see in launch footage.',
+    why:'At sea level Raptor’s exit pressure (~1.4 bar here) is close to ambient, so the cells are compact. Try the altitude slider in the next chapter.' },
+  { title:'Altitude changes the plume', cam:[8,-4.5,14], tgt:[0,-5,0], part:null, set:{ fluid:false, cut:false, fire:true, altSweep:true },
+    text:'Altitude is sweeping 0 → 40 km. As outside pressure drops, the exhaust is increasingly under-expanded: the plume balloons outward, the diamonds stretch and fade, and the afterburning orange edge disappears because there is no air left to burn with.',
+    why:'This is why sea-level engines lose efficiency at sea level and gain thrust as they climb — Raptor’s thrust rises by roughly 10% from pad to vacuum.' },
+  { title:'Start-up sequence', cam:[7.5,-0.5,10], tgt:[0,-1.2,0], part:null, set:{ alt:0, fire:'restart' },
+    text:'Chill-down and purge → propellant lead flow → spark-torch igniters → both preburners light and the turbopumps spool up → main chamber ignition → throttle ramp to mainstage. Raptor ignites electrically: no pyrophoric TEA-TEB (that green flash is a Merlin thing).',
+    why:'Full-flow engines are notoriously hard to start because two turbopumps, two preburners and the main chamber must come up in balance within about a second.' },
+  { title:'Gimbal & thrust vector control', cam:[6.5,0.5,8], tgt:[0,-0.6,0], part:'tvc', set:{ fire:true, gimbalDemo:true },
+    text:'Electromechanical actuators swing the whole engine around the gimbal bearing at the top. Starship uses electric TVC — no hydraulic fluid, pumps or accumulators.',
+    why:'Gimballing points the thrust so the vehicle can steer, balance itself and land. That’s the end of the tour — explore freely and click any part for details. 3D model: “SpaceX Starship Raptor 3 engine” by VoitAa (CC BY 4.0); materials, scene, simulation and explanations are original to this project.' },
+];
+const tour = { on:false, i:0, tw:null, gim:false, alt:false };
+function setCheck(id, val){ const el=$(id); if (el.checked!==val){ el.checked=val; el.dispatchEvent(new Event('change')); } }
+function setRange(id, val){ $(id).value=val; }
+function applyChapter(i){
+  const C=TOUR[i], s=C.set;
+  if (s.explode!==undefined) setRange('explode', s.explode);
+  ['cut','flow','fluid'].forEach(k=>{ if(s[k]!==undefined) setCheck(k, s[k]); });
+  if (s.labels!==undefined) setCheck('labelsOn', s.labels);
+  if (s.field){ $('field').value=s.field; $('field').dispatchEvent(new Event('change')); }
+  if (s.alt!==undefined) setRange('alt', s.alt);
+  if (s.throttle!==undefined) setRange('throttle', s.throttle);
+  if (s.cycle!==undefined) showCycle(s.cycle);
+  tour.gim = !!s.gimbalDemo; if (!tour.gim){ setRange('gimbal',0); setRange('gimbalY',0); }
+  tour.alt = !!s.altSweep; if (!tour.alt && s.alt===undefined && tour.prevAlt) setRange('alt',0);
+  tour.prevAlt = tour.alt;
+  if (s.fire===true && !firing && ignT<0) $('ignite').click();
+  if (s.fire===false && (firing||ignT>=0)) $('ignite').click();
+  if (s.fire==='restart'){ if (firing||ignT>=0) $('ignite').click(); setTimeout(()=>$('ignite').click(), 900); }
+  const P = C.part ? PARTS.find(p=>p.id===C.part) : null;
+  if (P !== selected){ if (P) select(P); else if (selected) select(selected); }
+  tour.tw = { t:0, p0:camera.position.clone(), t0:controls.target.clone(), p1:V3(...C.cam), t1:V3(...C.tgt) };
+  $('tourN').textContent = `${i+1} / ${TOUR.length}`;
+  $('tourT').textContent = C.title;
+  $('tourX').textContent = C.text;
+  $('tourW').textContent = C.why;
+  $('tourPrev').disabled = i===0; $('tourNext').textContent = i===TOUR.length-1 ? 'Finish' : 'Next →';
+  $('tourDots').innerHTML = TOUR.map((_,k)=>`<i class="${k===i?'on':''}"></i>`).join('');
+}
+function startTour(){ tour.on=true; tour.i=0; $('tour').style.display='block'; $('ctrl').classList.add('dim'); applyChapter(0); }
+function endTour(){ tour.on=false; tour.gim=false; tour.alt=false; $('tour').style.display='none'; $('ctrl').classList.remove('dim'); setRange('gimbal',0); setRange('gimbalY',0); }
+$('tourBtn').onclick = startTour;
+$('tourNext').onclick = ()=>{ if (tour.i<TOUR.length-1){ tour.i++; applyChapter(tour.i); } else endTour(); };
+$('tourPrev').onclick = ()=>{ if (tour.i>0){ tour.i--; applyChapter(tour.i); } };
+$('tourEnd').onclick = endTour;
+addEventListener('keydown', e=>{ if(!tour.on) return; if(e.key==='ArrowRight') $('tourNext').click(); if(e.key==='ArrowLeft') $('tourPrev').click(); if(e.key==='Escape') endTour(); });
+function tourUpdate(dt, t){
+  if (!tour.on) return;
+  if (tour.tw){ const w=tour.tw; w.t=Math.min(1,w.t+dt/1.6); const e=w.t<.5?4*w.t*w.t*w.t:1-Math.pow(-2*w.t+2,3)/2;
+    camera.position.lerpVectors(w.p0,w.p1,e); controls.target.lerpVectors(w.t0,w.t1,e); if (w.t>=1) tour.tw=null; }
+  if (tour.gim){ setRange('gimbal', (12*Math.sin(t*1.1)).toFixed(1)); setRange('gimbalY', (8*Math.sin(t*0.8+1)).toFixed(1)); }
+  if (tour.alt){ setRange('alt', (20-20*Math.cos(t*0.45)).toFixed(1)); }
+}
+// cycle diagram toggle
+function showCycle(on){ $('cycle').style.display = on?'block':'none'; $('specs').style.visibility = on?'hidden':''; $('cycleBtn').classList.toggle('on', on); }
+$('cycleBtn').onclick = ()=>showCycle($('cycle').style.display!=='block');
+$('cycleX').onclick = ()=>showCycle(false);
+
+// =====================================================================
+//  START / SHUTDOWN SEQUENCE (full-flow staged combustion)
+// =====================================================================
+let firing=false, power=0, ignT=-1, shutdown=false, pb=0, torch=0;
+const SEQ=[
+  [0.0,'T-3.0  Chill-down complete · He / N₂ purge'],
+  [0.5,'T-2.5  LOX & CH₄ lead flow · spark-torch igniters armed'],
+  [1.0,'T-2.0  Preburners light (ox-rich + fuel-rich) · turbopumps spool'],
+  [1.8,'T-1.2  Main chamber torch ignition · Pc rising'],
+  [2.6,'T-0.4  Throttle ramp'],
+  [3.2,'MAINSTAGE · 280 tf · Pc 350 bar'],
+];
+$('ignite').onclick=e=>{
+  if (ignT>=0 || firing){ firing=false; ignT=-1; shutdown=true; e.target.classList.remove('on'); $('seq').textContent='Shutdown · main valves close · preburners off · purge'; return; }
+  ignT=0; shutdown=false; e.target.classList.add('on');
+};
+
+// =====================================================================
+//  LOOP
+// =====================================================================
+const clock=new THREE.Clock();
+let simTick=1, cfdRunning=false, paramTick=1;
+const _p=V3();
+function animate(){
+  if (!innerWidth || !innerHeight) { clock.getDelta(); requestAnimationFrame(animate); return; }   // hidden / zero-size viewport
+  if (renderer.domElement.width===0) dispatchEvent(new Event('resize'));
+  const dt=Math.min(clock.getDelta(),0.05), t=clock.elapsedTime;
+  controls.update();
+  const throttle=+$('throttle').value; $('thrv').textContent=Math.round(throttle*100)+'%';
+
+  const ex=+$('explode').value, exS=ex*ex*(3-2*ex);
+  parts.forEach(g=>g.position.copy(g.userData.base).addScaledVector(g.userData.explodeDir, exS));
+
+  const gp=+$('gimbal').value, gy=+$('gimbalY').value; $('gpv').textContent=gp.toFixed(1)+'°'; $('gyv').textContent=gy.toFixed(1)+'°';
+  gimbalGroup.rotation.z += (THREE.MathUtils.degToRad(gp)-gimbalGroup.rotation.z)*Math.min(1,dt*5);
+  gimbalGroup.rotation.x += (THREE.MathUtils.degToRad(gy)-gimbalGroup.rotation.x)*Math.min(1,dt*5);
+
+  if (ignT>=0){
+    ignT+=dt; const step=[...SEQ].reverse().find(s=>ignT>=s[0]); $('seq').textContent=step[1];
+    if (ignT>1.0) pb = Math.min(1, pb+dt*1.2);
+    torch = (ignT>1.0&&ignT<1.4)||(ignT>1.8&&ignT<2.3) ? 1 : Math.max(0, torch-dt*4);
+    if (ignT>1.8) firing=true;
+    if (ignT>3.6) ignT=-2;
+  } else torch = Math.max(0, torch-dt*4);
+  if (shutdown) pb = Math.max(0, pb-dt*1.5);
+  power += ((firing?throttle:0)-power)*Math.min(1, dt*(firing?1.8:3.2));
+  $('pc').textContent=Math.round(P0*power)+' bar';
+  $('mdot').textContent=Math.round(MDOT*power)+' kg/s';
+  $('pb').textContent= pb<0.05?'off': pb<0.95?'lighting…':'running';
+
+  nozzleState();
+  const thrust = (THRUST_SL + 300*(1-nozzle.Pa/1.01325))*power;    // SL→vac gain on the sea-level nozzle
+  $('thr').textContent=Math.round(thrust).toLocaleString()+' kN';
+  $('altv').textContent=nozzle.alt.toFixed(1)+' km';
+
+  // CFD
+  const cfdOn = $('fluid').checked;
+  if (cfdOn !== cfdRunning){ cfdRunning=cfdOn; if (cfdOn && !cfdInited) cfdInit(); cfd.postMessage({ type:'run', on:cfdOn }); }
+  if (cfdOn && (paramTick+=dt)>0.25){ paramTick=0; cfd.postMessage({ type:'params', pa:nozzle.Pa/nozzle.P0e, P0e:nozzle.P0e }); }
+  if (cfdPlane) cfdPlane.visible = cfdOn && ex<0.02;
+  $('sim').style.display = cfdOn?'block':'none';
+  if (cfdOn && (simTick+=dt)>0.2){ simTick=0; drawSimPanel(); }
+
+  // plume / lights / heat
+  const pu=plumeMat.uniforms, air=Math.min(1,nozzle.Pa/1.01325);
+  pu.uTime.value=t; pu.uPower.value=Math.max(power, torch*0.25)*(cfdRunning?0.35:1); pu.uRatio.value=nozzle.ratio; pu.uLam.value=R_EXIT*2.1; pu.uAir.value=air; pu.uTorch.value=torch*(1-power);   // visual cell spacing matched to test-stand footage (CFD computes its own)
+  plumeMeshes.forEach(m=>m.visible = pu.uPower.value>0.01 && ex<0.02);
+  fireLight.intensity = power*28*(0.9+0.08*Math.sin(t*47)+0.05*Math.sin(t*131));
+  torchLight.intensity = torch*25;
+  MAT.body.userData.u.uHeat.value = power*0.5*(1-0.3*air);
+  bloom.strength = 0.2 + power*0.45;
+  hazePass.uniforms.uTime.value = t;
+  { _p.set(0, EXIT_Y-3.5, 0); body.localToWorld(_p); _p.project(camera);
+    hazePass.uniforms.uC.value.set(_p.x*.5+.5, _p.y*.5+.5); hazePass.uniforms.uHaze.value = power*air;
+    const d = camera.position.distanceTo(body.getWorldPosition(V3())); hazePass.uniforms.uR.value.set(2.2/d, 4.5/d*camera.aspect*0.6); hazePass.uniforms.uAspect.value = camera.aspect; }
+  // ground billow
+  { const P=smokeGeo.attributes.position.array, yG=-6.0; smokeMat.opacity = 0.3*power*air;
+    sm.forEach((q,i)=>{ q.life+=dt*0.22; if(q.life>1){ q.life=0; q.p.set(rnd(-2,2),yG-1.5,rnd(4,8)); q.v.set(rnd(-2,2),rnd(.8,2.2),rnd(5,10)); }
+      q.p.addScaledVector(q.v,dt); q.v.multiplyScalar(1-dt*0.35); P[i*3]=q.p.x; P[i*3+1]=q.p.y; P[i*3+2]=q.p.z; });
+    smokeGeo.attributes.position.needsUpdate=true; smokeMat.size = 1.6+power*1.5; }
+
+  // propellant flow animation
+  if (flowGroup.visible){ const spd=+$('simspd').value;
+    flowMats.forEach(m=>{ const g=m.userData.gate, rate = g==='pb' ? Math.max(pb*0.7, power) : Math.max(power, pb*0.35);
+      m.uniforms.uRate.value = rate; m.uniforms.uPhase.value += dt*m.userData.speed*(0.12+rate*2.4)*spd; }); }
+  flowGroup.visible = xray && ex<0.02;
+
+  tourUpdate(dt, t);
+  composer.render();
+  labelRenderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+$('load').remove();
+animate();
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); labelRenderer.setSize(innerWidth,innerHeight); });
+</script>
+</body>
+</html>
